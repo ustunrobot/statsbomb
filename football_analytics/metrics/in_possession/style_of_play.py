@@ -7,7 +7,6 @@ passing characteristics, sequence depth, and tempo. High-level strategic indicat
 
 import pandas as pd
 import numpy as np
-from typing import dict
 from metrics.base import BaseMetric
 from utils.pitch_zones import get_zone, is_progressive, PROGRESSIVE_PASS_THRESHOLD
 
@@ -42,12 +41,13 @@ class StyleOfPlay(BaseMetric):
         """
         result = {}
 
-        result.update(self._possession_zone_distribution())
-        result.update(self._pass_verticality_length())
-        result.update(self._sequence_depth_before_final_third())
-        result.update(self._carry_to_pass_progression_ratio())
-        result.update(self._consecutive_pass_sequences())
-        result.update(self._ball_release_tempo())
+        #result.update(self._possession_zone_distribution())
+        #result.update(self._pass_verticality_length())
+        #result.update(self._sequence_depth_before_final_third())
+        #result.update(self._carry_to_pass_progression_ratio())
+        #result.update(self._consecutive_pass_sequences())
+        #result.update(self._ball_release_tempo())
+        result.update(self._gk_long_pass_ratio())
 
         return result
 
@@ -319,4 +319,37 @@ class StyleOfPlay(BaseMetric):
         return {
             'sop_tempo_mean_release_sec': round(mean_tempo, 2),
             'sop_tempo_median_release_sec': round(median_tempo, 2),
+        }
+
+    def _gk_long_pass_ratio(self) -> dict:
+        """
+        GK Long Pass Ratio: What % of goalkeeper passes are long (>40m)?
+
+        Measures goalkeeper's distribution style: high ratio indicates
+        long-ball approach, low ratio indicates shorter, more controlled play.
+
+        Returns:
+            Dict with keys: sop_gk_long_pass_ratio, sop_gk_total_passes,
+                           sop_gk_long_passes
+        """
+        team_events = self.filter_team_events()
+        gk_passes = team_events[
+            (team_events['type_name'] == 'Pass') &
+            (team_events['position'] == 'Goalkeeper')
+        ].copy()
+
+        if len(gk_passes) == 0:
+            return {
+                'sop_gk_long_pass_ratio': 0.0,
+                'sop_gk_total_passes': 0,
+                'sop_gk_long_passes': 0,
+            }
+
+        long_passes = gk_passes[gk_passes['pass_length'] > 40.0]
+        ratio = (len(long_passes) / len(gk_passes) * 100) if len(gk_passes) > 0 else 0.0
+
+        return {
+            'sop_gk_long_pass_ratio': round(ratio, 2),
+            'sop_gk_total_passes': int(len(gk_passes)),
+            'sop_gk_long_passes': int(len(long_passes)),
         }

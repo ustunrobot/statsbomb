@@ -7,7 +7,6 @@ normalizing nested structures into flat DataFrames.
 
 import json
 from pathlib import Path
-from typing import list, tuple
 import pandas as pd
 import numpy as np
 
@@ -24,19 +23,26 @@ def get_all_teams(data_dir: str = "data") -> list:
     return teams
 
 
-def get_team_match_files(team: str, data_dir: str = "data") -> list:
+def get_team_match_files(team: str, data_dir: str = "data", week: int = None) -> list:
     """
-    Get all match JSON files for a team.
+    Get match JSON files for a team, optionally filtered by week.
 
     Args:
         team: Team name (folder name under data/teams/)
         data_dir: Base data directory path
+        week: Optional week number to filter (e.g., 15 for Week15_*.json)
 
     Returns:
         Sorted list of Path objects to .json files.
     """
     team_dir = Path(data_dir) / "teams" / team
-    files = sorted([f for f in team_dir.glob("*.json")])
+
+    if week:
+        # Filter by week pattern (e.g., Week15_)
+        files = sorted([f for f in team_dir.glob(f"Week{week}_*.json")])
+    else:
+        files = sorted([f for f in team_dir.glob("*.json")])
+
     return files
 
 
@@ -86,8 +92,13 @@ def load_match_events(filepath: str | Path) -> pd.DataFrame:
             'team': event.get('team', {}).get('name'),
             'player': event.get('player', {}).get('name'),
             'position': event.get('position', {}).get('name'),
+            'play_pattern': event.get('play_pattern', {}).get('name') if isinstance(event.get('play_pattern'), dict) else event.get('play_pattern'),
             'under_pressure': event.get('under_pressure'),
+            'possession': event.get('possession'),
+            'possession_team': event.get('possession_team', {}).get('name'),
+            'duration': event.get('duration'),
             'match_id': event.get('match_id'),
+            'recipient': event.get('pass', {}).get('recipient', {}).get('name'),
             'source_file': filepath.name,
         }
 
@@ -116,6 +127,7 @@ def load_match_events(filepath: str | Path) -> pd.DataFrame:
             row['pass_technique_name'] = pass_data.get('technique', {}).get('name')
             row['pass_height_name'] = pass_data.get('height', {}).get('name')
             row['pass_type_name'] = pass_data.get('type', {}).get('name')
+            row['pass_outcome_name'] = pass_data.get('outcome', {}).get('name')
             row['pass_success_probability'] = pass_data.get('pass_success_probability')
         else:
             row['pass_length'] = np.nan
@@ -126,6 +138,7 @@ def load_match_events(filepath: str | Path) -> pd.DataFrame:
             row['pass_technique_name'] = None
             row['pass_height_name'] = None
             row['pass_type_name'] = None
+            row['pass_outcome_name'] = None
             row['pass_success_probability'] = np.nan
 
         # Carry fields
@@ -160,24 +173,29 @@ def load_match_events(filepath: str | Path) -> pd.DataFrame:
             row['gk_type_name'] = None
             row['gk_position_name'] = None
 
+        # Defensive responsibility fields (for pressure analysis)
+        def_resp = event.get('defensive_responsibility')
+        row['defensive_responsibility'] = def_resp
+
         normalized.append(row)
 
     df = pd.DataFrame(normalized)
     return df
 
 
-def load_team_season(team: str, data_dir: str = "data") -> pd.DataFrame:
+def load_team_season(team: str, data_dir: str = "data", week: int = None) -> pd.DataFrame:
     """
     Load all matches for a team into a single DataFrame.
 
     Args:
         team: Team name
         data_dir: Base data directory
+        week: Optional week number to filter (e.g., 15 for Week15_*.json)
 
     Returns:
         Concatenated DataFrame of all team's events with reset index.
     """
-    files = get_team_match_files(team, data_dir)
+    files = get_team_match_files(team, data_dir, week=week)
     dfs = []
 
     for filepath in files:
@@ -194,13 +212,14 @@ def load_team_season(team: str, data_dir: str = "data") -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def load_full_league(data_dir: str = "data", teams: list = None) -> dict:
+def load_full_league(data_dir: str = "data", teams: list = None, week: int = None) -> dict:
     """
     Load all teams (or subset) into a dictionary of DataFrames.
 
     Args:
         data_dir: Base data directory
         teams: List of team names to load. If None, loads all teams.
+        week: Optional week number to filter (e.g., 15 for Week15_*.json)
 
     Returns:
         Dict mapping team name → events DataFrame
@@ -211,9 +230,9 @@ def load_full_league(data_dir: str = "data", teams: list = None) -> dict:
     league_data = {}
 
     for team in teams:
-        files = get_team_match_files(team, data_dir)
+        files = get_team_match_files(team, data_dir, week=week)
         print(f"Loading {team}... {len(files)} matches found")
-        league_data[team] = load_team_season(team, data_dir)
+        league_data[team] = load_team_season(team, data_dir, week=week)
 
     return league_data
 

@@ -8,7 +8,6 @@ to return a dictionary of measurements.
 from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
-from typing import dict
 from utils.pitch_zones import BUILDUP_X_THRESHOLD, PROGRESSIVE_PASS_THRESHOLD
 
 

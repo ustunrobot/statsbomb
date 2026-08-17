@@ -12,7 +12,6 @@ Currently a placeholder for future implementation.
 """
 
 from metrics.base import BaseMetric
-from typing import dict
 
 
 class StyleOfDefense(BaseMetric):

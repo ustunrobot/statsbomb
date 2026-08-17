@@ -9,7 +9,6 @@ Critical for understanding defensive-to-attack transition.
 import pandas as pd
 import numpy as np
 import networkx as nx
-from typing import dict
 from metrics.base import BaseMetric
 from utils.pitch_zones import BUILDUP_X_THRESHOLD
 
