@@ -23,25 +23,48 @@ def get_all_teams(data_dir: str = "data") -> list:
     return teams
 
 
-def get_team_match_files(team: str, data_dir: str = "data", week: int = None) -> list:
+def get_team_match_files(team: str, data_dir: str = "data", season: str = None, week: int = None) -> list:
     """
-    Get match JSON files for a team, optionally filtered by week.
+    Get match JSON files for a team with flexible filtering by season and/or week.
 
     Args:
         team: Team name (folder name under data/teams/)
         data_dir: Base data directory path
-        week: Optional week number to filter (e.g., 15 for Week15_*.json)
+        season: Optional season folder name (e.g., "25-26", "26-27")
+        week: Optional week number (e.g., 15 for Week15_*.json)
 
     Returns:
-        Sorted list of Path objects to .json files.
+        Sorted list of Path objects to .json files (excluding 360_frames files).
+
+    Logic:
+        - season + week: Get Week{week} file in that season folder
+        - season only: Get all .json files in that season folder
+        - week only (no season): Return empty list
+        - neither: Get all .json files from all season folders
     """
     team_dir = Path(data_dir) / "teams" / team
+    files = []
 
-    if week:
-        # Filter by week pattern (e.g., Week15_)
-        files = sorted([f for f in team_dir.glob(f"Week{week}_*.json")])
+    if season and week:
+        # Season and week provided: Get specific Week file in season folder
+        season_dir = team_dir / season
+        files = sorted([f for f in season_dir.glob(f"Week{week}_*.json") if "360_frames" not in f.name])
+
+    elif season and not week:
+        # Season only: Get all .json files in season folder
+        season_dir = team_dir / season
+        files = sorted([f for f in season_dir.glob("*.json") if "360_frames" not in f.name])
+
+    elif week and not season:
+        # Week without season: Return empty
+        return []
+
     else:
-        files = sorted([f for f in team_dir.glob("*.json")])
+        # Neither season nor week: Get all .json files from all season folders
+        for season_folder in sorted(team_dir.iterdir()):
+            if season_folder.is_dir():
+                files.extend([f for f in season_folder.glob("*.json") if "360_frames" not in f.name])
+        files = sorted(files)
 
     return files
 
@@ -183,7 +206,7 @@ def load_match_events(filepath: str | Path) -> pd.DataFrame:
     return df
 
 
-def load_team_season(team: str, data_dir: str = "data", week: int = None) -> pd.DataFrame:
+def load_team_season(team: str, data_dir: str = "data", season: str = None, week: int = None) -> pd.DataFrame:
     """
     Load all matches for a team into a single DataFrame.
 
@@ -195,7 +218,7 @@ def load_team_season(team: str, data_dir: str = "data", week: int = None) -> pd.
     Returns:
         Concatenated DataFrame of all team's events with reset index.
     """
-    files = get_team_match_files(team, data_dir, week=week)
+    files = get_team_match_files(team, data_dir, season=season, week=week)
     dfs = []
 
     for filepath in files:
@@ -212,7 +235,7 @@ def load_team_season(team: str, data_dir: str = "data", week: int = None) -> pd.
         return pd.DataFrame()
 
 
-def load_full_league(data_dir: str = "data", teams: list = None, week: int = None) -> dict:
+def load_full_league(data_dir: str = "data", teams: list = None, season: str = None, week: int = None) -> dict:
     """
     Load all teams (or subset) into a dictionary of DataFrames.
 
@@ -230,9 +253,9 @@ def load_full_league(data_dir: str = "data", teams: list = None, week: int = Non
     league_data = {}
 
     for team in teams:
-        files = get_team_match_files(team, data_dir, week=week)
+        files = get_team_match_files(team, data_dir, season=season, week=week)
         print(f"Loading {team}... {len(files)} matches found")
-        league_data[team] = load_team_season(team, data_dir, week=week)
+        league_data[team] = load_team_season(team, data_dir, season=season, week=week)
 
     return league_data
 

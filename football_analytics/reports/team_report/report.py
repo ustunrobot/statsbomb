@@ -23,6 +23,7 @@ from reportlab.platypus import (
     Image, KeepTogether, HRFlowable
 )
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+from ..report_common.excel_reader import read_excel_to_dicts
 
 # Import shared utilities
 from ..report_common.report_definition import (
@@ -287,6 +288,17 @@ def generate_team_report(team_name: str, output_dir: str = "data/outputs") -> st
 
     v = get_values(stats, team_name)
 
+    # Load last season stats from JSON
+    last_season_team_file = Path("data") / "competition_5_season_318_allseason_stats.json"
+    if last_season_team_file.exists():
+        with open(last_season_team_file, 'r') as f:
+            last_season_team = json.load(f)
+        print(f"last_season_team_file is found, generating report for team: {team_name}")
+    else:
+        print(f"last_season_team_file is not found, exiting report for team: {team_name}")
+        return
+
+
     # Create output directory
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -309,18 +321,25 @@ def generate_team_report(team_name: str, output_dir: str = "data/outputs") -> st
     story = []
     styles = get_styles()
 
+
+    # Load team stats definition from Excel file
+    team_stats_def_file = Path("data") / "team_stats_definition.xlsx"
+    team_stats_def = read_excel_to_dicts(str(team_stats_def_file))
+
     # ===== PAGE 1: COVER PAGE =====
     page_width = letter[0]   # Letter width = 8.5 inches
     page_height = letter[1]  # Letter height = 11 inches
     create_page_1_cover(story, v, page_width)
 
     # ===== PAGE 2: BASIC STATISTICS =====
-    create_page_2_basic_statistics(story, v, page_width)
+    #create_page_2_basic_statistics(story, v, page_width)
 
-    create_page_6_last5_analysis(story, page_width)
+    create_page_6_last5_analysis(story, page_width, team=team_name, stats=last_season_team, team_stats_def=team_stats_def)
     # ===== PAGE 3: BASIC STATISTICS =====
-    #create_page_3_buildup_analysis(story, v, page_width)
+    create_page_3_buildup_analysis(story, v, page_width)
 
+    create_page_5_analysis(story, team_name, v)
+    
     # Build PDF
     doc.build(story)
 
@@ -336,7 +355,7 @@ def generate_team_report(team_name: str, output_dir: str = "data/outputs") -> st
     create_page_4_out_of_possession(story, page_width)
 
     # ===== PAGE 5: ANALYSIS =====
-    create_page_5_analysis(story, team_name, stats)
+    
 
     
 

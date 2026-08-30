@@ -144,6 +144,73 @@ def get_week_data(competition_id: int, season_id: int, week_no: int, creds: dict
                     json.dump(frames, f, indent=2)
                 print(f"      ✓ Saved {len(frames)} 360 frames to {frames_filepath}")
 
+def get_player_season_data(competition_id: int, season_id: int, data_dir: str, team: str = None, creds: dict | None = None):
+    """Fetch and save player season stats."""
+    if creds is None:
+        creds = {}
+
+    stats = sb.player_season_stats(competition_id=competition_id, season_id=season_id, fmt="dict", creds=creds)
+
+    # Filter stats by team if provided
+    if team:
+        if isinstance(stats, list):
+            stats = [s for s in stats if s.get('team_name') == team]
+        elif isinstance(stats, dict):
+            stats = {k: v for k, v in stats.items() if isinstance(v, dict) and v.get('team_name') == team}
+
+    # Create data directory if it doesn't exist
+    data_path = Path(data_dir)
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    # Create filename using competition_id, season_id, and team (if provided)
+    if team:
+        filename = f"competition_{competition_id}_season_{season_id}_{team}_player_stats.json"
+    else:
+        filename = f"competition_{competition_id}_season_{season_id}_player_stats.json"
+    filepath = data_path / filename
+
+    # Save stats dict as JSON
+    with open(filepath, 'w') as f:
+        json.dump(stats, f, indent=2)
+
+    print(f"✓ Saved player season stats to {filepath}")
+    return filepath
+
+def get_season_stats(competition_id: int, season_id: int, data_dir: str, team: str = None, creds: dict | None = None):
+    """Fetch and save player season stats."""
+    if creds is None:
+        creds = {}
+
+    stats = sb.team_season_stats(competition_id=competition_id, season_id=season_id, fmt="dict", creds=creds)
+
+    # Filter stats by team if provided
+    if team:
+        if isinstance(stats, list):
+            stats = [s for s in stats if s.get('team_name') == team]
+        elif isinstance(stats, dict):
+            stats = {k: v for k, v in stats.items() if isinstance(v, dict) and v.get('team_name') == team}
+
+    # Create data directory if it doesn't exist
+    data_path = Path(data_dir)
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    # Create filename using competition_id, season_id, and team (if provided)
+    if team:
+        filename = f"competition_{competition_id}_season_{season_id}_{team}_season_stats.json"
+    else:
+        filename = f"competition_{competition_id}_season_{season_id}_allseason_stats.json"
+    filepath = data_path / filename
+
+    # Save stats dict as JSON
+    with open(filepath, 'w') as f:
+        json.dump(stats, f, indent=2)
+
+    print(f"✓ Saved season stats to {filepath}")
+    return filepath
+
+
+
+
 def get_team_data(competition_id: int, season_id: int, team_name: str, creds: dict | None = None, data_dir: str = "teams"):
     """Fetch and save events for all matches of a specific team."""
     if creds is None:
@@ -251,9 +318,20 @@ def main():
     p.add_argument("--team-name", type=str, help="team to fetch events for all season")
     p.add_argument("--get-team-data", action="store_true", help="gets all match events of a team in a season")
     p.add_argument("--get-week-data", action="store_true", help="gets all match events in a week in a season")
+    p.add_argument("--get-player-season-stats", action="store_true", help="requires competition and season id")
+    p.add_argument("--get-season-stats", action="store_true", help="requires competition and season id team optional")
     p.add_argument("--week-no", type=int, help="Week no to fetch events for")
 
+    # EFL League 2 Competition id = 5
+    # Season 318: 25/26
+    # Season 351: 26/27
+
     args = p.parse_args()
+
+    # Show help if no arguments provided
+    if len(sys.argv) == 1:
+        p.print_help()
+        return
 
     creds = {
         "user": "ustunrobot@gmail.com",
@@ -278,6 +356,25 @@ def main():
             else:
                 print("args needed --> week no, competition and season ids")
             return
+    if args.get_player_season_stats:
+        if args.competition_id and args.season_id:
+            if args.team_name:
+                get_player_season_data(args.competition_id, args.season_id, data_dir="/home/baris/statsbomb/football_analytics/data", team=args.team_name, creds=creds)
+            else:
+                get_player_season_data(args.competition_id, args.season_id, data_dir="/home/baris/statsbomb/football_analytics/data", creds=creds)
+        else:
+            print("args needed --> competition and season ids")
+        return
+
+    if args.get_season_stats:
+        if args.competition_id and args.season_id:
+            if args.team_name:
+                get_season_stats(args.competition_id, args.season_id, data_dir="/home/baris/statsbomb/football_analytics/data", team=args.team_name, creds=creds)
+            else:
+                get_season_stats(args.competition_id, args.season_id, data_dir="/home/baris/statsbomb/football_analytics/data", creds=creds)
+        else:
+            print("args needed --> competition and season ids")
+        return
     
     if args.get_team_data:
         if args.team_name and args.competition_id and args.season_id:

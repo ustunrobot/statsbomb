@@ -9,6 +9,112 @@ import pandas as pd
 import numpy as np
 from collections import deque
 
+def find_shape_from_ball_receipts(events: pd.DataFrame, team: str, filter: str = None) -> Dict:
+    """
+    Determine team shape from Ball Receipt locations in their own half (all events, not just buildups).
+
+    Args:
+        events: DataFrame of all match events
+        team: Team name to analyze
+
+    Returns:
+        Dict with shape analysis including:
+        - back_shape: "3 Back", "4 Back", or "Unknown"
+        - back_shape_confidence: 0.0-1.0 confidence score
+        - medians: Dict with position-level median x,y locations and counts
+    """
+    ret = {}
+
+    # Filter to team's events
+    team_events = events[events['team_name'] == team].copy() if 'team_name' in events.columns else events[events['team'] == team].copy()
+
+    if team_events.empty:
+        print(f"No events found for team: {team}")
+        return ret
+
+    # Filter to Ball Receipt* events in own half (x < 60)
+    ball_receipt_events = team_events[
+        (team_events['type_name'] == 'Ball Receipt*') &
+        (team_events['x'] < 60)
+    ].copy()
+
+    if ball_receipt_events.empty:
+        print(f"No Ball Receipt events in own half for team: {team}")
+        return ret
+
+    # Collect locations by position
+    positions_data = {}
+    all_touches = {}
+
+    for _, event in ball_receipt_events.iterrows():
+        position = event.get('position') if isinstance(event, dict) else getattr(event, 'position', None)
+
+        if not position or pd.isna(position):
+            continue
+
+        x = event.get('x') if isinstance(event, dict) else getattr(event, 'x', None)
+        y = event.get('y') if isinstance(event, dict) else getattr(event, 'y', None)
+
+        if pd.isna(x) or pd.isna(y):
+            continue
+
+        if filter:
+            if filter not in position:
+                continue
+        
+        location = {"x": x, "y": y}
+
+        if position not in all_touches:
+            all_touches[position] = []
+        all_touches[position].append(location)
+
+        if position not in positions_data:
+            positions_data[position] = {'x': [], 'y': [], 'count': 0}
+
+        positions_data[position]['x'].append(x)
+        positions_data[position]['y'].append(y)
+        positions_data[position]['count'] += 1
+
+    if not positions_data:
+        print(f"No valid position data found in own half")
+        return ret
+
+    # Determine back shape from Centre Back distribution
+    shape, confidence = find_back_shape(positions_data)
+    ret["back_shape"] = shape
+    ret["back_shape_confidence"] = confidence
+
+    # Calculate medians and filter by minimum count
+    medians = {}
+    min_count = 10  # Minimum number of events to include
+
+    for position, data in positions_data.items():
+        if data['count'] < min_count:
+            continue
+        median_x = pd.Series(data['x']).median()
+        median_y = pd.Series(data['y']).median()
+        medians[position] = {
+            'x': median_x,
+            'y': median_y,
+            'count': data['count']
+        }
+
+    if not medians:
+        print(f"No positions with >= {min_count} ball receipts in own half")
+        return ret
+
+    print(f"\nMedian locations by position in own half (n >= {min_count}):")
+    print("=" * 70)
+    for position in sorted(medians.keys()):
+        m = medians[position]
+        print(f"{position:25} | X: {m['x']:6.1f}, Y: {m['y']:6.1f} (n={m['count']:3d})")
+
+    ret["medians"] = medians
+    ret["all_touches"] = all_touches
+    return ret
+
+
+
 def find_back_shape(positions_data: Dict) -> Tuple[str, float]:
     """
     Determine defensive back shape based on Centre Back ball receipt distribution.
@@ -247,6 +353,113 @@ def position_group(position: str, back_shape: str) -> str:
         return "FWD"
     return position
 
+def visualize_touch(touches_by_position: dict, title: str = "Touch Locations") -> None:
+    """
+    Visualize touch locations by position with different colors for each position.
+
+    Args:
+        touches_by_position: Dict with position names as keys and list of location dicts as values
+        title: Title for the visualization and filename
+    """
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as patches
+    except ImportError:
+        print("matplotlib required for visualization. Install with: pip install matplotlib")
+        return
+
+    if not touches_by_position:
+        print("No locations to visualize")
+        return
+
+    # Color map for positions
+    colors_map = {
+        'Goalkeeper': "#737070",
+        'Right Center Back': '#FF0000',
+        'Left Center Back': "#006AFF",
+        'Right Back': "#484648",
+        'Left Back': "#0B0B0B",
+        'Right Defensive Midfield': "#409F08",
+        'Center Defensive Midfield': "#A212D6",
+        'Left Defensive Midfield': "#AB820A",
+        'Right Attacking Midfield': '#00FFFF',
+        'Left Attacking Midfield': '#FFFF00',
+        'Right Midfield': '#FF3333',
+        'Left Midfield': '#33FF33',
+        'Right Wing': '#3333FF',
+        'Left Wing': '#FFFF33',
+        'Right Forward': '#FF33FF',
+        'Left Forward': '#33FFFF',
+        'Center Forward': '#FF9900',
+        'Defensive Midfield': '#6666FF',
+        'Attacking Midfield': '#FF6666',
+        'Midfield': '#66FF66',
+        'Wing': '#FFFF66',
+        'Forward': '#FF66FF',
+    }
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(16, 12))
+
+    # Draw football pitch with teal stripes for realistic look
+    stripe_width = 10
+    colors_stripes = ["#E6F4EA", "#C0DECD"]
+    for i in range(0, 120, stripe_width):
+        color = colors_stripes[(i // stripe_width) % 2]
+        stripe = patches.Rectangle((i, 0), stripe_width, 80, linewidth=0, facecolor=color, alpha=0.8)
+        ax.add_patch(stripe)
+
+    # Draw pitch border
+    pitch_border = patches.Rectangle((0, 0), 120, 80, linewidth=2, edgecolor='#007A6A', facecolor='none')
+    ax.add_patch(pitch_border)
+
+    # Add pitch markings
+    ax.plot([60, 60], [0, 80], color='#007A6A', linestyle='-', linewidth=1, alpha=0.5)
+    ax.plot(60, 40, 'o', color='#007A6A', markersize=8, alpha=0.5)
+    circle = patches.Circle((60, 40), 9.15, fill=False, edgecolor='#007A6A', linewidth=1, alpha=0.5)
+    ax.add_patch(circle)
+
+    # Goal boxes
+    ax.add_patch(patches.Rectangle((0, 18), 16, 44, linewidth=1, edgecolor='#007A6A', fill=False, alpha=0.5))
+    ax.add_patch(patches.Rectangle((104, 18), 16, 44, linewidth=1, edgecolor='#007A6A', fill=False, alpha=0.5))
+
+    # Plot locations by position with different colors
+    total_touches = 0
+    for position, locations in touches_by_position.items():
+        if not locations:
+            continue
+        color = colors_map.get(position, '#808080')  # Gray default for unknown positions
+        x_coords = [loc['x'] for loc in locations]
+        y_coords = [loc['y'] for loc in locations]
+
+        ax.scatter(x_coords, y_coords, c=color, s=200, alpha=0.6, edgecolors='none', zorder=5, label=position)
+        total_touches += len(locations)
+
+    # Set axis properties - clean visualization
+    ax.set_xlim(-5, 125)
+    ax.set_ylim(85, -5)  # Reversed: y=0 at bottom
+    ax.set_aspect('equal')
+    ax.axis('off')  # Remove all axis spines, ticks, and labels
+
+    # Add legend
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=8)
+
+    plt.tight_layout()
+    plt.savefig(f'{title}.png', dpi=150, bbox_inches='tight')
+
+    # Rotate image 90 degrees clockwise
+    try:
+        from PIL import Image
+        img = Image.open(f'{title}.png')
+        rotated_img = img.rotate(90, expand=True)
+        rotated_img.save(f'{title}.png')
+    except Exception as e:
+        print(f"Warning: Could not rotate image: {e}")
+
+    print(f"\n✓ Visualization saved to: {title}.png (rotated 90° clockwise)")
+    print(f"Total touches visualized: {total_touches}")
+    print(f"Positions included: {len(touches_by_position)}")
+    plt.close(fig)
 
 def visualize_shape(medians: dict, title: str = "Medians") -> None:
     """
@@ -323,16 +536,16 @@ def visualize_shape(medians: dict, title: str = "Medians") -> None:
     ax.axis('off')  # Remove all axis spines, ticks, and labels
 
     plt.tight_layout()
-    plt.savefig('all_positions_median.png', dpi=150, bbox_inches='tight')
+    plt.savefig(title + '.png', dpi=150, bbox_inches='tight')
 
     # Rotate image 90 degrees clockwise
     try:
         from PIL import Image
         img = Image.open('all_positions_median.png')
-        rotated_img = img.rotate(-90, expand=True)
+        rotated_img = img.rotate(90, expand=True)
         rotated_img.save('all_positions_median.png')
     except Exception as e:
         print(f"Warning: Could not rotate image: {e}")
 
     print(f"\n✓ Visualization saved to: all_positions_median.png (rotated 90° clockwise)")
-    #plt.show()
+    plt.close(fig)

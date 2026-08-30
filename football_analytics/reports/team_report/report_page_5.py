@@ -53,9 +53,9 @@ def create_page_5_analysis(story, team_name: str, stats: Dict):
     content_items.append(create_section_label("DEFENSIVE FORMATION"))
     content_items.append(Spacer(1, 0.12 * inch))
 
-    back_shape = stats.shape.get("back_shape", "Unknown")
-    confidence = stats.shape.get("back_shape_confidence", 0.0)
-    gk_inv = stats.shape.get("gk_involvement", 0.0)
+    back_shape = stats.get("shape", {}).get("back_shape", "Unknown")
+    confidence = stats.get("shape", {}).get("back_shape_confidence", 0.0)
+    gk_inv = stats.get("shape", {}).get("gk_involvement", 0.0)
 
     # Formation metrics - flat table (no nesting)
     formation_data = [
@@ -95,9 +95,9 @@ def create_page_5_analysis(story, team_name: str, stats: Dict):
     content_items.append(create_section_label("BUILDUP PATTERNS"))
     content_items.append(Spacer(1, 0.12 * inch))
 
-    buildup_left = stats.shape.get("buildup_end_left", 0.0)
-    buildup_center = stats.shape.get("buildup_end_center", 0.0)
-    buildup_right = stats.shape.get("buildup_end_right", 0.0)
+    buildup_left = stats.get("shape", {}).get("buildup_end_left", 0.0)
+    buildup_center = stats.get("shape", {}).get("buildup_end_center", 0.0)
+    buildup_right = stats.get("shape", {}).get("buildup_end_right", 0.0)
 
     # Buildup locations with bars
     buildup_data = [
@@ -132,10 +132,10 @@ def create_page_5_analysis(story, team_name: str, stats: Dict):
     content_items.append(create_section_label("KEY PASSING PATTERNS"))
     content_items.append(Spacer(1, 0.12 * inch))
 
-    bp_pos_1 = stats.shape.get("backward_pass_position_1", "N/A")
-    bp_count_1 = stats.shape.get("backward_pass_count_1", 0)
-    bp_pos_2 = stats.shape.get("backward_pass_position_2", "N/A")
-    bp_count_2 = stats.shape.get("backward_pass_count_2", 0)
+    bp_pos_1 = stats.get("shape", {}).get("backward_pass_position_1", "N/A")
+    bp_count_1 = stats.get("shape", {}).get("backward_pass_count_1", 0)
+    bp_pos_2 = stats.get("shape", {}).get("backward_pass_position_2", "N/A")
+    bp_count_2 = stats.get("shape", {}).get("backward_pass_count_2", 0)
 
     pass_data = [
         ["Rank", "Position", "Passes"],
@@ -167,7 +167,7 @@ def create_page_5_analysis(story, team_name: str, stats: Dict):
     content_items.append(create_section_label("BALL RECEIPT LOCATIONS"))
     content_items.append(Spacer(1, 0.12 * inch))
 
-    medians = stats.shape.get("medians", {})
+    medians = stats.get("shape", {}).get("medians", {})
     if medians:
         # Create table data
         position_data = [["Position", "X Coord", "Y Coord", "Count"]]

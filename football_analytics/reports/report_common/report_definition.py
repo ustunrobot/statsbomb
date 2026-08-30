@@ -16,13 +16,30 @@ from reportlab.platypus import Flowable, Paragraph
 
 
 @dataclass
+class teamKPI:
+    """Statistical values for a single radar metric."""
+    name: str
+    short_name: str    
+    long_name: str
+    group: str
+    description: str
+    unit: str
+    value: float
+    reverse: bool       
+     
+
+@dataclass
 class ChartValue:
     """Statistical values for a single radar metric."""
     chart_val: float
     avg_val: float
     max_val: float
+    min_val: float    
     percentile: float
     percentile_total: int
+    group: str = None
+    reverse: int = 0
+    std_dev: float = None
 
 
 @dataclass
@@ -44,13 +61,19 @@ class ProgressBar(Flowable):
         height=12,
         fill_color=colors.blue,
         background_color=colors.lightgrey,
+        average_percentage=None,
+        reverse=None
     ):
         super().__init__()
         self.width = width
         self.height = height
         self.percentage = max(0, min(100, percentage))
-        self.fill_color = fill_color
-        self.background_color = background_color
+        self.fill_color = fill_color        
+        self.background_color = background_color        
+        if reverse is not None:
+            if reverse == 1:
+                self.background_color = "#b5b3b3"
+        self.average_percentage = max(0, min(100, average_percentage)) if average_percentage is not None else None
 
     def draw(self):
         r = self.height / 2
@@ -75,6 +98,13 @@ class ProgressBar(Flowable):
                 0, 0, filled_width, self.height, radius,
                 stroke=0, fill=1
             )
+
+        # Average marker (thin vertical line)
+        if self.average_percentage is not None:
+            avg_x = self.width * self.average_percentage / 100
+            self.canv.setStrokeColor(colors.HexColor("#555555"))
+            self.canv.setLineWidth(1)
+            self.canv.line(avg_x, 0, avg_x, self.height)
 # ═════════════════════════════════════════════════════════════════════════
 # FONT SETUP
 # ═════════════════════════════════════════════════════════════════════════
@@ -107,9 +137,27 @@ def get_values(stats, team: str = None) -> Dict:
 
     return  v
 
+def get_color(values: ChartValue) -> colors.Color:
+    percentile = values.percentile    
+    total = values.percentile_total
+    ratio = percentile / total
+    if values.reverse == 1:
+            ratio = 1 - ratio
+
+    if ratio < 0.2:
+        return colors.HexColor("#e90c0c")
+    if ratio < 0.4:
+        return colors.HexColor("#e96c0c")
+    if ratio < 0.6:
+            return colors.HexColor("#536fe0")
+    if ratio < 0.8:
+        return colors.HexColor("#4c9510")
+
+    return colors.HexColor("#D619C3")
+
 def register_custom_fonts():
     """Register available custom fonts from fonts/ and fonts/roboto/ directories."""
-    fonts_dir = Path(__file__).parent.parent.parent / "fonts"
+    fonts_dir = Path(__file__).parent.parent / "fonts"
 
     registered = {}
 
@@ -182,6 +230,14 @@ COLOR_RED_MID = colors.HexColor("#FD9999")         # Light red background
 # Header specific
 COLOR_HEADER_BG = colors.HexColor("#12151A")        # Dark header background
 COLOR_HEADER_TEXT = colors.white                    # White text in header
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# KPI CONFIGURATION
+# ═════════════════════════════════════════════════════════════════════════
+
+# Key Performance Indicators for team analysis
+team_kpis = []
 
 
 # ═════════════════════════════════════════════════════════════════════════

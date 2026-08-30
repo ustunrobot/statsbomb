@@ -110,7 +110,7 @@ def create_page_3_buildup_analysis(story, v: Dict, page_width: float):
     container_data_2 = [[
         container_1,
         Paragraph("", styles['BodyText']),  # Spacer
-        create_container_content("SHAPE", f"{stats.shape.get('back_shape', 'N/A')}", label_style='SectionLabelRed'),
+        create_container_content("SHAPE", f"{v.get('shape', {}).get('back_shape', 'N/A')}", label_style='SectionLabelRed'),
     ]]
 
     containers_2 = Table(container_data_2, colWidths=[col_width_2, spacer_width_2, col_width_2])

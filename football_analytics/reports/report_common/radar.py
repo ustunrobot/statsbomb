@@ -9,21 +9,6 @@ from reportlab.lib.units import inch
 from .report_definition import *
 from reportlab.platypus import Paragraph, Table, TableStyle, PageBreak
 
-def get_color(values: ChartValue) -> colors.Color:
-    percentile = values.percentile
-    total = values.percentile_total
-    if percentile / total > 0.8:
-        return colors.HexColor("#e90c0c")
-    if percentile / total > 0.6:
-        return colors.HexColor("#e96c0c")
-    if percentile / total > 0.4:
-            return colors.HexColor("#536fe0")
-    if percentile / total > 0.2:
-        return colors.HexColor("#4c9510")
-
-    return colors.HexColor("#D619C3")
-
-
 def create_player_radar_chart(styles, radar_params: ChartParams = None) -> Table:
     """
     Create a radar chart for player performance metrics using ReportLab Drawing.
