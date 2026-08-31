@@ -193,18 +193,23 @@ class EventProcessor:
 
     def _finalize_aggregates(self, aggregates_by_layer: Dict) -> None:
         """
-        Calculate derived Metric fields (value_pg, percentile, etc.) after aggregation.
+        Calculate derived metrics and percentiles after aggregation.
 
         Args:
             aggregates_by_layer: Dictionary of aggregates to finalize in-place
         """
         from .metrics import Metric
+        from .kpi.xg_layer import DERIVED_METRICS
 
         for layer_name, team_aggregates in aggregates_by_layer.items():
-            # Get all metric field names (skip 'team_name' and 'matches')
             if not team_aggregates:
                 continue
 
+            # Calculate derived metrics for xg layer
+            if layer_name == 'xg':
+                self._calculate_derived_metrics(team_aggregates, DERIVED_METRICS)
+
+            # Get all metric field names (skip 'team_name' and 'matches')
             sample_team = next(iter(team_aggregates.values()))
             metric_fields = [k for k in sample_team.keys()
                            if k not in ('team_name', 'matches') and isinstance(sample_team[k], Metric)]
@@ -212,6 +217,55 @@ class EventProcessor:
             # For each metric field, calculate derived values and percentiles
             for field_name in metric_fields:
                 self._calculate_metric_percentiles(team_aggregates, field_name)
+
+    def _calculate_derived_metrics(self, team_aggregates: Dict, derived_metrics: Dict) -> None:
+        """
+        Calculate derived metrics based on existing metrics.
+
+        Args:
+            team_aggregates: Dictionary of teams with Metric objects
+            derived_metrics: Dictionary of derived metric definitions
+                            {
+                                'metric_name': {
+                                    'description': '...',
+                                    'type': 'ratio' or 'total',
+                                    'formula': lambda agg: value
+                                }
+                            }
+        """
+        from .metrics import Metric
+
+        for metric_name, metric_def in derived_metrics.items():
+            formula = metric_def['formula']
+            metric_type = metric_def.get('type', 'total')  # Default to 'total' if not specified
+
+            # Calculate the derived metric for each team
+            for team_id, team_data in team_aggregates.items():
+                try:
+                    # Calculate value using the formula
+                    value = formula(team_data)
+                    matches = team_data['matches']
+
+                    # Calculate value_pg based on metric type
+                    if metric_type == 'ratio':
+                        # For ratios (already normalized), value_pg = value
+                        value_pg = value
+                    else:  # 'total'
+                        # For totals, value_pg = value / matches
+                        value_pg = value / matches if matches > 0 else 0.0
+
+                    # Create or update the Metric object
+                    team_data[metric_name] = Metric(
+                        value=value,
+                        value_pg=value_pg,
+                        percentile=0.0,
+                        percentile_order=0,
+                        percentile_total=0,
+                        sample_size=matches
+                    )
+                except Exception:
+                    # If calculation fails, create a default Metric
+                    team_data[metric_name] = Metric.default()
 
     def _evaluate_findings(self, findings_layer: XGFindingsLayer, xg_aggregates: Dict) -> Dict:
         """

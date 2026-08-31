@@ -90,24 +90,7 @@ if __name__ == "__main__":
             print(f"  - {team_data['team_name']}")
         sys.exit(1)
 
-    # Display team findings
-    print(f"\n\n{team_name} - Findings:")
-    print("=" * 70)
-    if selected_team_id in findings_agg:
-        findings = findings_agg[selected_team_id]
-        if findings:
-            for finding in sorted(findings, key=lambda f: f.category):
-                evidence = get_finding_evidence(finding.finding_name, selected_team_data[selected_team_id])
-                if evidence:
-                    print(f"  [{finding.category}] {finding.finding_name} ({evidence})")
-                else:
-                    print(f"  [{finding.category}] {finding.finding_name}")
-        else:
-            print("  No findings triggered")
-    else:
-        print("  No findings triggered")
-
-    # Display xG metrics
+        # Display xG metrics
     print(f"\n\n{team_name} - Aggregate xG Metrics:")
     print("=" * 70)
     team_data = selected_team_data[selected_team_id]
@@ -128,3 +111,20 @@ if __name__ == "__main__":
             print(f"  Percentile Rank: {field_value.percentile_order}/{field_value.percentile_total}")
             print(f"  Sample Size: {field_value.sample_size}")
             print()
+
+    # Display team findings
+    print(f"\n\n{team_name} - Findings:")
+    print("=" * 70)
+    if selected_team_id in findings_agg:
+        findings = findings_agg[selected_team_id]
+        if findings:
+            for finding in sorted(findings, key=lambda f: f.category):
+                evidence = get_finding_evidence(finding.finding_name, selected_team_data[selected_team_id])
+                if evidence:
+                    print(f"  [{finding.category}] {finding.finding_name} ({evidence})")
+                else:
+                    print(f"  [{finding.category}] {finding.finding_name}")
+        else:
+            print("  No findings triggered")
+    else:
+        print("  No findings triggered")
