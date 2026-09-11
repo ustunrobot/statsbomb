@@ -44,25 +44,16 @@ def get_competitions(creds: dict | None = None, fmt: str = "dataframe"):
     return sb.competitions(fmt=fmt, creds=creds)
 
 def fetch_events_with_360(match_id: int, creds: dict | None = None, include_360: bool = False):
-    """Fetch events for a match, optionally including 360 frames."""
+    """Fetch events for a match with 360 metrics included in events."""
     if creds is None:
         creds = {}
 
     print(f"\nFetching events for match {match_id}...")
+    # Always fetch with 360 metrics included in events
     events = sb.events(match_id, fmt="dict", creds=creds, include_360_metrics=True)
-    print(f"✓ Fetched {len(events)} events")
+    print(f"✓ Fetched {len(events)} events (with 360 metrics)")
 
     result = {"events": events, "frames": None}
-
-    # Fetch 360 data if requested
-    if include_360:
-        print(f"Fetching 360 frames for match {match_id}...")
-        try:
-            frames = sb.api_client.frames(match_id, creds=creds)
-            result["frames"] = frames
-            print(f"✓ Fetched {len(frames)} 360 frames")
-        except Exception as e:
-            print(f"⚠ Could not fetch 360 frames: {e}")
 
     return result
 
@@ -86,14 +77,14 @@ def save_events_json(match_id: int, output_file: str, creds: dict | None = None)
     print(f"✓ Saved {len(events)} events to {output_file}")
 
     # Save 360 frames if available
-    if frames:
-        frames_file = output_path.stem + "_360frames.json"
-        frames_path = output_path.parent / frames_file
+    # if frames:
+    #     frames_file = output_path.stem + "_360frames.json"
+    #     frames_path = output_path.parent / frames_file
 
-        with open(frames_path, 'w') as f:
-            json.dump(frames, f, indent=2)
+    #     with open(frames_path, 'w') as f:
+    #         json.dump(frames, f, indent=2)
 
-        print(f"✓ Saved {len(frames)} 360 frames to {frames_path}")
+    #     print(f"✓ Saved {len(frames)} 360 frames to {frames_path}")
 
 def get_week_data(competition_id: int, season_id: int, week_no: int, creds: dict | None = None, data_dir: str = "teams", season_folder: str = "26-27"):
     """Fetch and save events for all matches of a specific team."""
@@ -137,12 +128,12 @@ def get_week_data(competition_id: int, season_id: int, week_no: int, creds: dict
             print(f"      ✓ Saved {len(events)} events to {filepath}")
 
             # Save 360 frames if available
-            if frames:
-                frames_filename = f"Week{week}_{home}_vs_{away}_360frames.json"
-                frames_filepath = team_dir / frames_filename
-                with open(frames_filepath, 'w') as f:
-                    json.dump(frames, f, indent=2)
-                print(f"      ✓ Saved {len(frames)} 360 frames to {frames_filepath}")
+            # if frames:
+            #     frames_filename = f"Week{week}_{home}_vs_{away}_360frames.json"
+            #     frames_filepath = team_dir / frames_filename
+            #     with open(frames_filepath, 'w') as f:
+            #         json.dump(frames, f, indent=2)
+            #     print(f"      ✓ Saved {len(frames)} 360 frames to {frames_filepath}")
 
 def get_player_season_data(competition_id: int, season_id: int, data_dir: str, team: str = None, creds: dict | None = None):
     """Fetch and save player season stats."""
@@ -211,7 +202,7 @@ def get_season_stats(competition_id: int, season_id: int, data_dir: str, team: s
 
 
 
-def get_team_data(competition_id: int, season_id: int, team_name: str, creds: dict | None = None, data_dir: str = "teams"):
+def get_team_data(competition_id: int, season_id: int, team_name: str, creds: dict | None = None, data_dir: str = "data_temp", season_name: str | None = None):
     """Fetch and save events for all matches of a specific team."""
     if creds is None:
         creds = {}
@@ -221,11 +212,35 @@ def get_team_data(competition_id: int, season_id: int, team_name: str, creds: di
     # Filter matches where team_name is home_team or away_team
     team_matches = matches[(matches['home_team'] == team_name) | (matches['away_team'] == team_name)]
 
-    print(f"\nFound {len(team_matches)} matches for {team_name}")
+    # Filter out future matches - only include matches with date on or before today
+    from datetime import datetime
+    today = pd.Timestamp(datetime.now().date())
+    total_before_filter = len(team_matches)
+    team_matches = team_matches[pd.to_datetime(team_matches['match_date']) <= today]
+    total_after_filter = len(team_matches)
 
-    # Create team directory
-    team_dir = Path(data_dir) / team_name
-    team_dir.mkdir(parents=True, exist_ok=True)
+    if total_before_filter != total_after_filter:
+        excluded = total_before_filter - total_after_filter
+        print(f"\nDate filter applied: Excluded {excluded} future matches")
+
+    print(f"Found {len(team_matches)} matches for {team_name} (all on or before {today.date()})")
+
+    # Get season name if not provided
+    if season_name is None:
+        competitions_df = sb.competitions(fmt="dataframe", creds=creds)
+        season_row = competitions_df[(competitions_df['competition_id'] == competition_id) &
+                                      (competitions_df['season_id'] == season_id)]
+        if not season_row.empty:
+            season_name = str(season_row.iloc[0]['season_name'])
+        else:
+            season_name = str(season_id)
+
+    # Convert "/" to "-" in season name for folder naming
+    season_folder_name = season_name.replace('/', '-')
+
+    # Create team/season directory structure
+    team_season_dir = Path(data_dir) / "teams" / team_name / season_folder_name
+    team_season_dir.mkdir(parents=True, exist_ok=True)
 
     # Debug: Print available columns if needed
     # print(f"Available columns: {team_matches.columns.tolist()}")
@@ -248,7 +263,7 @@ def get_team_data(competition_id: int, season_id: int, team_name: str, creds: di
 
         # Create filename
         filename = f"Week{week}_{home}_vs_{away}.json"
-        filepath = team_dir / filename
+        filepath = team_season_dir / filename
 
         # Save events
         with open(filepath, 'w') as f:
@@ -256,12 +271,12 @@ def get_team_data(competition_id: int, season_id: int, team_name: str, creds: di
         print(f"      ✓ Saved {len(events)} events to {filepath}")
 
         # Save 360 frames if available
-        if frames:
-            frames_filename = f"Week{week}_{home}_vs_{away}_360frames.json"
-            frames_filepath = team_dir / frames_filename
-            with open(frames_filepath, 'w') as f:
-                json.dump(frames, f, indent=2)
-            print(f"      ✓ Saved {len(frames)} 360 frames to {frames_filepath}")
+        # if frames:
+        #     frames_filename = f"Week{week}_{home}_vs_{away}_360frames.json"
+        #     frames_filepath = team_season_dir / frames_filename
+        #     with open(frames_filepath, 'w') as f:
+        #         json.dump(frames, f, indent=2)
+        #     print(f"      ✓ Saved {len(frames)} 360 frames to {frames_filepath}")
 
 def list_matches(competition_id: int, season_id: int, creds: dict | None = None):
     """Get and display available matches grouped by team."""
@@ -394,8 +409,8 @@ def main():
             frames = data["frames"]
             print(f"\nMatch {args.match_id}:")
             print(f"  Events: {len(events)}")
-            if frames:
-                print(f"  360 Frames: {len(frames)}")
+            # if frames:
+            #     print(f"  360 Frames: {len(frames)}")
         return
 
     # Default: fetch events for match 4002550
