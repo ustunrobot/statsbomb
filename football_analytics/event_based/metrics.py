@@ -8,6 +8,12 @@ class Metric:
     percentile_order: int
     percentile_total: int
     sample_size: int
+    average: float
+    z_score: float
+    label: str = ""
+    label2: str = ""
+    bar_label_low: str = ""
+    bar_label_high: str = ""
 
     @classmethod
     def default(cls):
@@ -18,5 +24,11 @@ class Metric:
             percentile=0.0,
             percentile_order=0,
             percentile_total=0,
-            sample_size=0
+            sample_size=0,
+            average=0.0,
+            z_score=0.0,
+            label="",
+            label2="",
+            bar_label_low="Low",
+            bar_label_high="High"
         )

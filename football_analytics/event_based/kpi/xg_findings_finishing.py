@@ -37,7 +37,6 @@ def evaluate_finishing(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Finishing",
             finding_name="Clinical finishing",
-            description="Team scores substantially more than expected from its chances.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -45,7 +44,6 @@ def evaluate_finishing(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Finishing",
             finding_name="Finishing underperformance",
-            description="Team scores substantially fewer than expected.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -56,7 +54,6 @@ def evaluate_finishing(team_id: int, team_name: str, team_metrics: Dict,
             findings.append(Finding(
                 category="Finishing",
                 finding_name="High conversion of shooting opportunities",
-                description="High proportion of shots become goals.",
                 team_id=team_id,
                 team_name=team_name
             ))
@@ -64,7 +61,6 @@ def evaluate_finishing(team_id: int, team_name: str, team_metrics: Dict,
             findings.append(Finding(
                 category="Finishing",
                 finding_name="Low conversion",
-                description="Low proportion of shots become goals.",
                 team_id=team_id,
                 team_name=team_name
             ))

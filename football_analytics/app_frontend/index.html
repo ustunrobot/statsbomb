@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Intelligence - Report Generator</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">⚽</span>
+                    <h1>Football Intelligence</h1>
+                </div>
+                <p class="subtitle">Opposition & Player Report Generator</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Selection Panel -->
+            <section class="selection-panel">
+                <div class="section-header">
+                    <h2>Generate Report</h2>
+                    <div class="download-buttons">
+                        <button id="downloadFullSeasonBtn" class="btn btn-info" disabled>
+                            <span class="btn-icon">📥</span>
+                            Download Full Season
+                        </button>
+                        <button id="downloadWeeklyBtn" class="btn btn-info" disabled>
+                            <span class="btn-icon">📅</span>
+                            Download Weekly Data
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="competitionSelect">Competition</label>
+                    <select id="competitionSelect" class="input-select">
+                        <option value="">Choose a competition...</option>
+                    </select>
+                    <span class="help-text">Select a league and season combination</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="teamSelect">Team</label>
+                    <select id="teamSelect" class="input-select" disabled>
+                        <option value="">Choose a team...</option>
+                    </select>
+                    <span class="help-text">Select a team from the chosen competition</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="playerSelect">Player (Optional)</label>
+                    <select id="playerSelect" class="input-select" disabled>
+                        <option value="">-- Full Team Report --</option>
+                    </select>
+                    <span class="help-text">Leave empty for full team report, or select a player for player-specific report</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="reportTypeSelect">Report Type</label>
+                    <div class="report-type-container">
+                        <label class="radio-label">
+                            <input type="radio" name="reportType" value="opposition" checked>
+                            <span class="radio-text">Opposition Report</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="reportType" value="player">
+                            <span class="radio-text">Player Report</span>
+                        </label>
+                    </div>
+                    <span class="help-text">Choose the type of report to generate</span>
+                </div>
+
+                <div class="button-group">
+                    <button id="generateBtn" class="btn btn-primary" disabled>
+                        <span class="btn-icon">📊</span>
+                        Generate Report
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Panel -->
+            <section id="statusPanel" class="status-panel" style="display: none;">
+                <h2>Generation Status</h2>
+
+                <div class="status-content">
+                    <div class="spinner"></div>
+                    <h3 id="statusTitle">Generating Report...</h3>
+                    <p id="statusMessage">Please wait while your report is being generated. This may take a few moments.</p>
+
+                    <div class="progress-bar-container">
+                        <div id="progressBar" class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <p id="progressText" class="progress-text">0%</p>
+                    </div>
+
+                    <div id="statusDetails" class="status-details">
+                        <p id="statusDetail1"></p>
+                        <p id="statusDetail2"></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Result Panel -->
+            <section id="resultPanel" class="result-panel" style="display: none;">
+                <h2 id="resultTitle">Report Ready</h2>
+
+                <div class="result-content">
+                    <div class="success-icon">✓</div>
+                    <h3 id="resultSubtitle">Your report has been generated successfully!</h3>
+                    <p id="resultMessage"></p>
+
+                    <div class="result-actions">
+                        <a id="downloadLink" href="#" class="btn btn-success" download>
+                            <span class="btn-icon">⬇️</span>
+                            Download PDF Report
+                        </a>
+                        <button id="generateAnotherBtn" class="btn btn-secondary">
+                            <span class="btn-icon">➕</span>
+                            Generate Another Report
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Panel -->
+            <section id="errorPanel" class="error-panel" style="display: none;">
+                <h2>Error</h2>
+
+                <div class="error-content">
+                    <div class="error-icon">✕</div>
+                    <h3 id="errorTitle">An error occurred</h3>
+                    <p id="errorMessage"></p>
+
+                    <button id="dismissErrorBtn" class="btn btn-secondary">
+                        <span class="btn-icon">🔄</span>
+                        Try Again
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Football Intelligence v1.0 | StatsBomb Data Integration</p>
+            <p id="versionInfo">Ready to generate reports</p>
+        </footer>
+    </div>
+
+    <!-- Loading indicator (for initial load) -->
+    <div id="initialLoadSpinner" class="initial-load-spinner">
+        <div class="spinner"></div>
+        <p>Loading Football Intelligence...</p>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

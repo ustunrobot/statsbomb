@@ -32,7 +32,6 @@ def evaluate_aerial_attack(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Aerial Attack",
             finding_name="Strong aerial scoring threat",
-            description="Headers contribute substantial attacking xG.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -40,7 +39,6 @@ def evaluate_aerial_attack(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Aerial Attack",
             finding_name="Low aerial threat",
-            description="Headers contribute little attacking xG.",
             team_id=team_id,
             team_name=team_name
         ))

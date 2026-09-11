@@ -12,12 +12,48 @@ from typing import Dict, Callable, List, Optional, Any
 from dataclasses import dataclass
 
 
+def create_percentile_findings(value: float, upper_threshold: float, lower_threshold: float,
+                                finding_name: str, category: str, team_id: int, team_name: str) -> List['Finding']:
+    """
+    Create findings based on percentile thresholds.
+
+    Args:
+        value: Percentile value (0-100)
+        upper_threshold: Threshold for "High" finding (e.g., 80)
+        lower_threshold: Threshold for "Low" finding (e.g., 20)
+        finding_name: Base finding name (e.g., "attacking output")
+        category: Finding category
+        team_id: Team ID
+        team_name: Team name
+
+    Returns:
+        List of Finding objects if thresholds are met, empty list otherwise
+    """
+    findings = []
+
+    if value >= upper_threshold:
+        findings.append(Finding(
+            category=category,
+            finding_name=f"High {finding_name}",
+            team_id=team_id,
+            team_name=team_name
+        ))
+    elif value <= lower_threshold:
+        findings.append(Finding(
+            category=category,
+            finding_name=f"Low {finding_name}",
+            team_id=team_id,
+            team_name=team_name
+        ))
+
+    return findings
+
+
 @dataclass
 class Finding:
     """Represents a triggered finding."""
     category: str
     finding_name: str
-    description: str
     team_id: int
     team_name: str
 

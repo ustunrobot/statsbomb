@@ -65,7 +65,7 @@ class XGField:
     - Direction: for, against
     - Type: total, direct_corner, direct_free_kick, direct_kick_off, penalty,
              set_piece_corner, set_piece_throw_in, set_piece_free_kick,
-             set_piece_total, open_play, header, foot, inbox, outbox
+             set_piece_total, open_play, header, inbox, outbox
 
     Access: xg_field.xg.for.open_play or xg_field["xg"]["for"]["open_play"]
     """
@@ -75,7 +75,7 @@ class XGField:
         self._metric_types = [
             'total', 'direct_corner', 'direct_free_kick', 'direct_kick_off',
             'penalty', 'set_piece_corner', 'set_piece_throw_in', 'set_piece_free_kick',
-            'set_piece_total', 'open_play', 'header', 'foot', 'inbox', 'outbox', 'one_on_one'
+            'set_piece_total', 'open_play', 'header', 'inbox', 'outbox', 'one_on_one'
         ]
 
         # Initialize multi-dimensional structure
@@ -124,44 +124,58 @@ class XGField:
 #   'total' - value is a total (divide by match count for value_pg)
 DERIVED_METRICS = {
     'xgf_minus_goal': {
-            'description': 'Expected goals per shot',
+            'description': 'xGF minus Goals For',
             'type': 'total',
-            'formula': lambda agg: agg['xg_for_total'].value - agg['goal_for_total'].value
+            'formula': lambda agg: (agg.get('xg_for_total', Metric.default()).value -
+                                   agg.get('goal_for_total', Metric.default()).value)
         },
     'xga_minus_goal': {
-                'description': 'Expected goals per shot',
+                'description': 'xGA minus Goals Against',
                 'type': 'total',
-                'formula': lambda agg: agg['xg_against_total'].value - agg['goal_against_total'].value
+                'formula': lambda agg: (agg.get('xg_against_total', Metric.default()).value -
+                                       agg.get('goal_against_total', Metric.default()).value)
             },
+    'goal_per_xgf': {
+            'description': 'Goals Per xGF',
+            'type': 'ratio',
+            'formula': lambda agg: (agg.get('goal_for_total', Metric.default()).value /
+                                   max(1, agg.get('xg_for_total', Metric.default()).value))
+        },
     'xgf_per_shot': {
         'description': 'Expected goals per shot',
         'type': 'ratio',
-        'formula': lambda agg: agg['xg_for_total'].value / max(1, agg['shot_for_total'].value)
+        'formula': lambda agg: (agg.get('xg_for_total', Metric.default()).value /
+                               max(1, agg.get('shot_for_total', Metric.default()).value))
     },
     'xgf_open_play_per_open_shots': {
         'description': 'Expected goals per open play shot',
         'type': 'ratio',
-        'formula': lambda agg: agg['xg_for_open_play'].value / max(1, agg['shot_for_open_play'].value)
+        'formula': lambda agg: (agg.get('xg_for_open_play', Metric.default()).value /
+                               max(1, agg.get('shot_for_open_play', Metric.default()).value))
     },
     'shots_outbox_per_shots': {
         'description': 'Outbox shot ratio in open play shots',
         'type': 'ratio',
-        'formula': lambda agg: agg['shot_for_outbox'].value / max(1, agg['shot_for_open_play'].value)
+        'formula': lambda agg: (agg.get('shot_for_outbox', Metric.default()).value /
+                               max(1, agg.get('shot_for_open_play', Metric.default()).value))
     },
-    'xgf_open_play_outbox_per_xgf': {
-        'description': 'Outbox xGF ratio in open play xGF',
+    'xgf_outbox_per_xgf': {
+        'description': 'Outbox xGF ratio in xGF',
         'type': 'ratio',
-        'formula': lambda agg: agg['xg_for_outbox'].value / max(1, agg['xg_for_open_play'].value)
+        'formula': lambda agg: (agg.get('xg_for_outbox', Metric.default()).value /
+                               max(1, agg.get('xg_for_total', Metric.default()).value))
     },
     'xgf_set_piece_ratio': {
         'description': 'Set piece xGF ratio in total xGF',
         'type': 'ratio',
-        'formula': lambda agg: agg['xg_for_set_piece_total'].value / max(1, agg['xg_for_total'].value)
+        'formula': lambda agg: (agg.get('xg_for_set_piece_total', Metric.default()).value /
+                               max(1, agg.get('xg_for_total', Metric.default()).value))
     },
     'xgf_open_play_ratio': {
         'description': 'Open play xGF ratio in total xGF',
         'type': 'ratio',
-        'formula': lambda agg: agg['xg_for_open_play'].value / max(1, agg['xg_for_total'].value)
+        'formula': lambda agg: (agg.get('xg_for_open_play', Metric.default()).value /
+                               max(1, agg.get('xg_for_total', Metric.default()).value))
     },
 }
 
@@ -182,9 +196,13 @@ class XGLayer:
             accumulator: KPIAccumulator instance to store results
             team_ids: Dictionary mapping team_id -> team_name (all teams in match)
         """
-        # Only process shot events
+        # Only process shot events and own goals
+        own_goal = False
         if not self._is_shot_event(event_row):
-            return
+            if not self._is_own_goal_event(event_row):
+                return
+            else:
+                own_goal = True
 
         # Extract key information
         team_id = self._get_team_id(event_row)
@@ -203,6 +221,12 @@ class XGLayer:
         if op_team and "xg" not in op_team:
             op_team["xg"] = XGField()
 
+        if own_goal:
+            # For own goals, increment opponent's and teams' goals only
+            team["xg"].goal.for_dir.total.value += 1
+            op_team["xg"].goal.against.total.value += 1
+            return
+        
         # Extract shot data
         xg_value = self._get_xg_value(event_row)
         if xg_value is None:
@@ -214,111 +238,183 @@ class XGLayer:
         shot_type = self._get_shot_type(event_row)
         body_part = self._get_body_part(event_row)
         is_header = body_part.lower() == "head"
-        is_one_on_one = self._is_one_on_one(event_row)
-        is_set_piece = self._is_set_piece(event_row)
-        shot_location = self._get_shot_location(event_row)
-        play_pattern = self._get_play_pattern(event_row)
+        is_one_on_one = self._is_one_on_one(event_row)        
+        shot_location = self._get_shot_location(event_row)        
+        is_on_target = self._is_on_target(event_row)
 
         xg = team["xg"]
         op_xg = op_team["xg"]
 
-        # Update attacking team stats - total
+        # Update totals
         xg.xg.for_dir.total.value += xg_value
         xg.shot.for_dir.total.value += 1
-
-        # Update defending team stats - total
         op_xg.xg.against.total.value += xg_value
         op_xg.shot.against.total.value += 1
+        if shot_location == "inbox":
+            xg.xg.for_dir.inbox.value += xg_value
+            xg.shot.for_dir.inbox.value += 1
+            op_xg.xg.against.inbox.value += xg_value
+            op_xg.shot.against.inbox.value += 1
+        else:
+            xg.xg.for_dir.outbox.value += xg_value
+            xg.shot.for_dir.outbox.value += 1
+            op_xg.xg.against.outbox.value += xg_value
+            op_xg.shot.against.outbox.value += 1
 
-        # On target tracking
-        if self._is_on_target(event_row):
+        if is_on_target:
             xg.shot_target.for_dir.total.value += 1
             op_xg.shot_target.against.total.value += 1
 
-       ## BURALAR DÜZELECEK TEK TEK İNCELE YENİ DIMENSION BASED YAPIYA GÖRE
-       ##  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+        if is_goal:
+            xg.goal.for_dir.total.value += 1
+            op_xg.goal.against.total.value += 1
+            if shot_location == "inbox":
+                xg.goal.for_dir.inbox.value += 1
+                op_xg.goal.against.inbox.value += 1
+            else:
+                xg.goal.for_dir.outbox.value += 1
+                op_xg.goal.against.outbox.value += 1
+        
+        # Update body part
+        if is_header:
+            xg.xg.for_dir.header.value += xg_value
+            op_xg.xg.against.header.value += xg_value
+            xg.shot.for_dir.header.value += 1
+            op_xg.shot.against.header.value += 1    
+            if is_on_target:
+                xg.shot_target.for_dir.header.value += 1
+                op_xg.shot_target.against.header.value += 1
+            if is_goal:
+                xg.goal.for_dir.header.value += 1
+                op_xg.goal.against.header.value += 1
 
-        # Categorize by shot type (Penalty, Free Kick, Corner, Open Play)
-        if shot_type == "penalty":
+        # Update one on one
+        if is_one_on_one:
+            xg.xg.for_dir.one_on_one.value += xg_value
+            op_xg.xg.against.one_on_one.value += xg_value
+            xg.shot.for_dir.one_on_one.value += 1
+            op_xg.shot.against.one_on_one.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.one_on_one.value += 1
+                op_xg.shot_target.against.one_on_one.value += 1
+            if is_goal:
+                xg.goal.for_dir.one_on_one.value += 1
+                op_xg.goal.against.one_on_one.value += 1
+
+        # Update direct corner
+        if shot_type == "direct_corner":
+            xg.xg.for_dir.direct_corner.value += xg_value
+            op_xg.xg.against.direct_corner.value += xg_value
+            xg.shot.for_dir.direct_corner.value += 1
+            op_xg.shot.against.direct_corner.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.direct_corner.value += 1
+                op_xg.shot_target.against.direct_corner.value += 1
+            if is_goal:
+                xg.goal.for_dir.direct_corner.value += 1
+                op_xg.goal.against.direct_corner.value += 1
+
+        # Update direct free kick
+        elif shot_type == "direct_free_kick":
+            xg.xg.for_dir.direct_free_kick.value += xg_value
+            op_xg.xg.against.direct_free_kick.value += xg_value
+            xg.shot.for_dir.direct_free_kick.value += 1
+            op_xg.shot.against.direct_free_kick.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.direct_free_kick.value += 1
+                op_xg.shot_target.against.direct_free_kick.value += 1
+            if is_goal:
+                xg.goal.for_dir.direct_free_kick.value += 1
+                op_xg.goal.against.direct_free_kick.value += 1
+
+        # Update direct kick off
+        elif shot_type == "direct_kick_off":
+            xg.xg.for_dir.direct_kick_off.value += xg_value
+            op_xg.xg.against.direct_kick_off.value += xg_value
+            xg.shot.for_dir.direct_kick_off.value += 1
+            op_xg.shot.against.direct_kick_off.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.direct_kick_off.value += 1
+                op_xg.shot_target.against.direct_kick_off.value += 1
+            if is_goal:
+                xg.goal.for_dir.direct_kick_off.value += 1
+                op_xg.goal.against.direct_kick_off.value += 1
+
+        # Update penalty
+        elif shot_type == "penalty":
             xg.xg.for_dir.penalty.value += xg_value
             op_xg.xg.against.penalty.value += xg_value
             xg.shot.for_dir.penalty.value += 1
             op_xg.shot.against.penalty.value += 1
-        elif shot_type == "free kick":
-            xg.xg.for_dir.set_piece_free_kick.value += xg_value
-            op_xg.xg.against.set_piece_free_kick.value += xg_value
-            xg.shot.for_dir.set_piece_free_kick.value += 1
-            op_xg.shot.against.set_piece_free_kick.value += 1
-        elif shot_type == "corner":
-            xg.xg.for_dir.set_piece_corner.value += xg_value
-            op_xg.xg.against.set_piece_corner.value += xg_value
-            xg.shot.for_dir.set_piece_corner.value += 1
-            op_xg.shot.against.set_piece_corner.value += 1
-        elif shot_type == "open play":
+            if is_on_target:
+                xg.shot_target.for_dir.penalty.value += 1
+                op_xg.shot_target.against.penalty.value += 1
+            if is_goal:
+                xg.goal.for_dir.penalty.value += 1
+                op_xg.goal.against.penalty.value += 1
+
+        # Update open play
+        elif shot_type == "open_play":
             xg.xg.for_dir.open_play.value += xg_value
             op_xg.xg.against.open_play.value += xg_value
             xg.shot.for_dir.open_play.value += 1
             op_xg.shot.against.open_play.value += 1
-
-            # Further categorize open play by location
-            if shot_location == "inbox":
-                xg.xg.for_dir.inbox.value += xg_value
-                op_xg.xg.against.inbox.value += xg_value
-                xg.shot.for_dir.inbox.value += 1
-                op_xg.shot.against.inbox.value += 1
-            elif shot_location == "outbox":
-                xg.xg.for_dir.outbox.value += xg_value
-                op_xg.xg.against.outbox.value += xg_value
-                xg.shot.for_dir.outbox.value += 1
-                op_xg.shot.against.outbox.value += 1
-
-        # Body part tracking (headers)
-        if is_header:
-            xg.shot.for_dir.header.value += 1
-            op_xg.shot.against.header.value += 1
-            xg.xg.for_dir.header.value += xg_value
-            op_xg.xg.against.header.value += xg_value
-
-        # Play pattern tracking (corners and throw-ins)
-        if play_pattern == "from corner":
-            xg.xg.for_dir.set_piece_corner.value += xg_value
-            op_xg.xg.against.set_piece_corner.value += xg_value
-        elif play_pattern == "from throw in":
-            xg.xg.for_dir.set_piece_throw_in.value += xg_value
-            op_xg.xg.against.set_piece_throw_in.value += xg_value
-
-        # One-on-one tracking (added to metric types if needed)
-        if is_one_on_one:
-            xg.shot.for_dir.one_on_one.value += 1
-            op_xg.shot.against.one_on_one.value += 1
-
-        if is_set_piece:
-            xg.xg.for_dir.set_piece_total.value += xg_value
-            op_xg.xg.against.set_piece_total.value += xg_value
-
-        # Track goals
-        if is_goal:
-            xg.goal.for_dir.total.value += 1
-            op_xg.goal.against.total.value += 1
-
-            # Categorize goals by type
-            if shot_type == "penalty":
-                xg.goal.for_dir.penalty.value += 1
-                op_xg.goal.against.penalty.value += 1
-            elif shot_type == "free kick":
-                xg.goal.for_dir.set_piece_free_kick.value += 1
-                op_xg.goal.against.set_piece_free_kick.value += 1
-            elif shot_type == "corner":
-                xg.goal.for_dir.set_piece_corner.value += 1
-                op_xg.goal.against.set_piece_corner.value += 1
-            elif shot_type == "open play":
+            if is_on_target:
+                xg.shot_target.for_dir.open_play.value += 1
+                op_xg.shot_target.against.open_play.value += 1
+            if is_goal:
                 xg.goal.for_dir.open_play.value += 1
                 op_xg.goal.against.open_play.value += 1
 
-            # Goals by body part
-            if is_header:
-                xg.goal.for_dir.header.value += 1
-                op_xg.goal.against.header.value += 1
+        # Update set piece free kick
+        elif shot_type == "set_piece_free_kick":
+            xg.xg.for_dir.set_piece_free_kick.value += xg_value
+            op_xg.xg.against.set_piece_free_kick.value += xg_value
+            xg.shot.for_dir.set_piece_free_kick.value += 1
+            op_xg.shot.against.set_piece_free_kick.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.set_piece_free_kick.value += 1
+                op_xg.shot_target.against.set_piece_free_kick.value += 1
+            if is_goal:
+                xg.goal.for_dir.set_piece_free_kick.value += 1
+                op_xg.goal.against.set_piece_free_kick.value += 1
+
+        elif shot_type == "set_piece_corner":
+            xg.xg.for_dir.set_piece_corner.value += xg_value
+            op_xg.xg.against.set_piece_corner.value += xg_value
+            xg.shot.for_dir.set_piece_corner.value += 1
+            op_xg.shot.against.set_piece_corner.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.set_piece_corner.value += 1
+                op_xg.shot_target.against.set_piece_corner.value += 1
+            if is_goal:
+                xg.goal.for_dir.set_piece_corner.value += 1
+                op_xg.goal.against.set_piece_corner.value += 1
+
+        elif shot_type == "set_piece_throw_in":
+            xg.xg.for_dir.set_piece_throw_in.value += xg_value
+            op_xg.xg.against.set_piece_throw_in.value += xg_value
+            xg.shot.for_dir.set_piece_throw_in.value += 1
+            op_xg.shot.against.set_piece_throw_in.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.set_piece_throw_in.value += 1
+                op_xg.shot_target.against.set_piece_throw_in.value += 1
+            if is_goal:
+                xg.goal.for_dir.set_piece_throw_in.value += 1
+                op_xg.goal.against.set_piece_throw_in.value += 1
+
+        if "set_piece" in shot_type:
+            xg.xg.for_dir.set_piece_total.value += xg_value
+            op_xg.xg.against.set_piece_total.value += xg_value
+            xg.shot.for_dir.set_piece_total.value += 1
+            op_xg.shot.against.set_piece_total.value += 1
+            if is_on_target:
+                xg.shot_target.for_dir.set_piece_total.value += 1
+                op_xg.shot_target.against.set_piece_total.value += 1
+            if is_goal:
+                xg.goal.for_dir.set_piece_total.value += 1
+                op_xg.goal.against.set_piece_total.value += 1
+
 
     def _is_shot_event(self, event_row: Dict) -> bool:
         """Check if event is a shot."""
@@ -331,121 +427,115 @@ class XGLayer:
 
         return event_type == "Shot"
 
+    def _is_own_goal_event(self, event_row: Dict) -> bool:
+            """Check if event is a shot."""
+            if "type" not in event_row:
+                return False
+    
+            event_type = event_row["type"]
+            if isinstance(event_type, dict):
+                return event_type.get("name") == "Own Goal For"
+    
+            return False
+
     def _get_team_id(self, event_row: Dict) -> Optional[int]:
         """Extract team ID from event."""
         if "team" in event_row and isinstance(event_row["team"], dict):
             return event_row["team"].get("id")
         return None
-
+    
     def _get_xg_value(self, event_row: Dict) -> Optional[float]:
         """Extract xG value from shot event."""
-        if "shot" not in event_row:
-            return None
-
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return None
-
-        # Try multiple xG field names (StatsBomb uses statsbomb_xg)
-        xg = shot_data.get("statsbomb_xg") 
+        xg = shot_data.get("statsbomb_xg")
         if xg is not None:
             try:
                 return float(xg)
             except (ValueError, TypeError):
                 return None
-
         return None
 
     def _get_xg_shot_uplift_value(self, event_row: Dict) -> Optional[float]:
-            """Extract xG value from shot event."""
-            if "shot" not in event_row:
+        """Extract xG shot uplift value from shot event."""
+        shot_data = event_row["shot"]
+        xg = shot_data.get("shot_execution_xg_uplift")
+        if xg is not None:
+            try:
+                return float(xg)
+            except (ValueError, TypeError):
                 return None
-    
-            shot_data = event_row["shot"]
-            if not isinstance(shot_data, dict):
-                return None
-    
-            # Try multiple xG field names (StatsBomb uses statsbomb_xg)
-            xg = shot_data.get("shot_execution_xg_uplift") 
-            if xg is not None:
-                try:
-                    return float(xg)
-                except (ValueError, TypeError):
-                    return None
-    
-            return None
+        return None
     
     def _is_goal(self, event_row: Dict) -> bool:
         """Check if shot resulted in a goal."""
-        if "shot" not in event_row:
-            return False
-
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return False
-
         outcome = shot_data.get("outcome")
         if isinstance(outcome, dict):
             return outcome.get("name") == "Goal"
-
         return outcome == "Goal"
 
     def _is_on_target(self, event_row: Dict) -> bool:
         """Check if shot was on target."""
-        if "shot" not in event_row:
-            return False
-
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return False
-
         outcome = shot_data.get("outcome")
         if isinstance(outcome, dict):
             outcome_name = outcome.get("name", "").lower()
         else:
             outcome_name = str(outcome).lower() if outcome else ""
-
         return outcome_name in ["goal", "saved", "saved off t", "saved to post", "post"]
 
     def _get_shot_type(self, event_row: Dict) -> str:
-        """Extract shot type (e.g., 'open_play', 'set_piece')."""
-        if "shot" not in event_row:
-            return "unknown"
-
+        """
+        Extract shot type categorized as:
+        - direct_corner, direct_free_kick, direct_kick_off, penalty
+        - set_piece_corner, set_piece_throw_in, set_piece_free_kick
+        - open_play
+        """
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return "unknown"
-
         shot_type = shot_data.get("type")
         if isinstance(shot_type, dict):
-            return shot_type.get("name", "unknown").lower()
+            shot_type_name = shot_type.get("name", "")
+        else:
+            shot_type_name = str(shot_type) if shot_type else ""
 
-        return str(shot_type).lower() if shot_type else "unknown"
+        # Direct shot types
+        if shot_type_name == "Corner":
+            return "direct_corner"
+        elif shot_type_name == "Free Kick":
+            return "direct_free_kick"
+        elif shot_type_name == "Kick Off":
+            return "direct_kick_off"
+        elif shot_type_name == "Penalty":
+            return "penalty"
+        elif shot_type_name == "Open Play":
+            # Check if set_piece_phase exists
+            if "set_piece_phase" not in event_row:
+                return "open_play"
+
+            # set_piece_phase exists, check play_pattern
+            play_pattern = self._get_play_pattern(event_row)
+            if play_pattern == "from free kick":
+                return "set_piece_free_kick"
+            elif play_pattern == "from corner":
+                return "set_piece_corner"
+            elif play_pattern == "from throw in":
+                return "set_piece_throw_in"
+            else:
+                return "open_play"
+
+        return "open_play"
 
     def _get_body_part(self, event_row: Dict) -> str:
         """Extract body part used for shot (Head, Right Foot, Left Foot)."""
-        if "shot" not in event_row:
-            return "unknown"
-
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return "unknown"
-
         body_part = shot_data.get("body_part")
         if isinstance(body_part, dict):
             return body_part.get("name", "unknown")
-
         return str(body_part) if body_part else "unknown"
 
     def _is_one_on_one(self, event_row: Dict) -> bool:
         """Check if shot was a one-on-one situation."""
-        if "shot" not in event_row:
-            return False
-
         shot_data = event_row["shot"]
-        if not isinstance(shot_data, dict):
-            return False
-
         return shot_data.get("one_on_one", False)
 
     def _is_set_piece(self, event_row: Dict) -> bool:

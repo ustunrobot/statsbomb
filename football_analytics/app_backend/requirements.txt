@@ -1,0 +1,46 @@
+# Football Intelligence Application - Backend Requirements
+
+# Web Framework
+Flask==2.3.0
+Flask-CORS==4.0.0
+
+# Environment
+python-dotenv==1.0.0
+
+# Data Processing
+pandas==2.0.0
+numpy==1.24.0
+
+# StatsBomb Integration
+statsbombpy==1.11.0
+
+# PDF Generation
+WeasyPrint==59.0
+Pillow==10.0.0
+
+# Database (optional, for future use)
+SQLAlchemy==2.0.0
+
+# API & Serialization
+Pydantic==2.0.0
+requests==2.31.0
+
+# Task Queue (optional, for async tasks)
+APScheduler==3.10.0
+Celery==5.3.0
+
+# Logging & Monitoring (optional)
+python-json-logger==2.0.0
+
+# Testing (optional)
+pytest==7.4.0
+pytest-flask==1.2.0
+
+# Development (optional)
+black==23.0.0
+flake8==6.0.0
+mypy==1.0.0
+
+# Production Server (for deployment)
+gunicorn==21.0.0
+waitress==2.1.0

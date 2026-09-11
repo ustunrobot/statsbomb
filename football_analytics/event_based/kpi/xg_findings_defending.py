@@ -1,6 +1,6 @@
 """Defending findings covering defensive process, shot suppression, efficiency, and process vs outcome."""
 
-from .xg_findings_base import Finding, register_evaluator, register_evidence
+from .xg_findings_base import Finding, register_evaluator, register_evidence, create_percentile_findings
 from typing import Dict, List
 
 
@@ -50,7 +50,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defending",
             finding_name="Elite defensive process",
-            description="Exceptionally low xGA.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -58,7 +57,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defending",
             finding_name="Strong defensive process",
-            description="Team restricts opponents to low xG.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -67,7 +65,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defending",
             finding_name="Very weak defensive process",
-            description="Exceptionally high xGA.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -75,7 +72,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defending",
             finding_name="Weak defensive process",
-            description="Opponents generate substantial xG.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -85,7 +81,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defensive Shot Suppression",
             finding_name="Strong shot suppression",
-            description="Opponents take relatively few shots.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -93,7 +88,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defensive Shot Suppression",
             finding_name="Poor shot suppression",
-            description="Opponents generate high shot volume.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -104,7 +98,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defensive Efficiency",
             finding_name="Defensive overperformance",
-            description="Fewer goals conceded than expected.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -112,7 +105,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Defensive Efficiency",
             finding_name="Defensive underperformance",
-            description="More goals conceded than expected.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -123,7 +115,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Process vs Outcome",
             finding_name="Attack outperforming process",
-            description="Scoring output is substantially above the underlying xG process.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -131,7 +122,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Process vs Outcome",
             finding_name="Attack underperforming process",
-            description="Scoring output is substantially below the underlying xG process.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -140,7 +130,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Process vs Outcome",
             finding_name="Defence outperforming process",
-            description="Goals conceded are substantially below xGA.",
             team_id=team_id,
             team_name=team_name
         ))
@@ -148,7 +137,6 @@ def evaluate_defending(team_id: int, team_name: str, team_metrics: Dict,
         findings.append(Finding(
             category="Process vs Outcome",
             finding_name="Defence underperforming process",
-            description="Goals conceded are substantially above xGA.",
             team_id=team_id,
             team_name=team_name
         ))

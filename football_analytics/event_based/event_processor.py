@@ -184,6 +184,7 @@ class EventProcessor:
 
         # Finalize aggregates by calculating derived fields
         self._finalize_aggregates(aggregates_by_layer)
+        return aggregates_by_layer
 
         # Evaluate findings for each team
         findings_layer = XGFindingsLayer()
@@ -215,8 +216,9 @@ class EventProcessor:
                            if k not in ('team_name', 'matches') and isinstance(sample_team[k], Metric)]
 
             # For each metric field, calculate derived values and percentiles
+            derived_metrics = DERIVED_METRICS if layer_name == 'xg' else {}
             for field_name in metric_fields:
-                self._calculate_metric_percentiles(team_aggregates, field_name)
+                self._calculate_metric_percentiles(team_aggregates, field_name, derived_metrics)
 
     def _calculate_derived_metrics(self, team_aggregates: Dict, derived_metrics: Dict) -> None:
         """
@@ -246,6 +248,10 @@ class EventProcessor:
                     value = formula(team_data)
                     matches = team_data['matches']
 
+                    # Handle None or invalid values
+                    if value is None:
+                        value = 0.0
+
                     # Calculate value_pg based on metric type
                     if metric_type == 'ratio':
                         # For ratios (already normalized), value_pg = value
@@ -261,10 +267,14 @@ class EventProcessor:
                         percentile=0.0,
                         percentile_order=0,
                         percentile_total=0,
-                        sample_size=matches
+                        sample_size=matches,
+                        average=0.0,
+                        z_score=0.0,
+                        label=metric_def.get('description', metric_name)
                     )
-                except Exception:
-                    # If calculation fails, create a default Metric
+                except Exception as e:
+                    # If calculation fails, log it and create a default Metric
+                    print(f"Error calculating derived metric '{metric_name}' for team {team_id}: {e}")
                     team_data[metric_name] = Metric.default()
 
     def _evaluate_findings(self, findings_layer: XGFindingsLayer, xg_aggregates: Dict) -> Dict:
@@ -289,20 +299,26 @@ class EventProcessor:
 
         return findings_by_team
 
-    def _calculate_metric_percentiles(self, team_aggregates: Dict, field_name: str) -> None:
+    def _calculate_metric_percentiles(self, team_aggregates: Dict, field_name: str, derived_metrics: Dict = None) -> None:
         """
         Calculate value_pg, percentile, percentile_order, percentile_total, sample_size for a metric.
 
         Args:
             team_aggregates: Dictionary of teams with Metric objects
             field_name: Name of the metric field to process
+            derived_metrics: Dictionary of derived metric definitions (to skip recalculating value_pg for derived metrics)
         """
+        if derived_metrics is None:
+            derived_metrics = {}
+
         # First pass: calculate value_pg and sample_size
         for team_id, team_data in team_aggregates.items():
             metric = team_data[field_name]
             matches = team_data['matches']
             metric.sample_size = matches
-            if matches > 0:
+            # Only recalculate value_pg if this is NOT a derived metric
+            # Derived metrics have type-aware value_pg calculation from _calculate_derived_metrics()
+            if matches > 0 and field_name not in derived_metrics:
                 metric.value_pg = metric.value / matches
 
         # Second pass: rank teams by value_pg and calculate percentiles
@@ -320,3 +336,25 @@ class EventProcessor:
             metric.percentile_total = total_teams
             # Percentile: (teams_behind / total_teams) * 100
             metric.percentile = ((total_teams - rank) / max(1, total_teams - 1)) * 100 if total_teams > 1 else 100.0
+
+        # Third pass: calculate z-scores
+        if total_teams > 1:
+            # Calculate mean and standard deviation
+            values = [team_data[field_name].value_pg for team_data in team_aggregates.values()]
+            mean = sum(values) / len(values)
+
+            # Calculate standard deviation
+            variance = sum((x - mean) ** 2 for x in values) / len(values)
+            std_dev = variance ** 0.5
+
+            # Calculate z-score for each team
+            for team_id, team_data in team_aggregates.items():
+                metric = team_data[field_name]
+                if std_dev > 0:
+                    metric.z_score = (metric.value_pg - mean) / std_dev
+                else:
+                    metric.z_score = 0.0
+        else:
+            # Single team: z-score is 0
+            for team_id, team_data in team_aggregates.items():
+                team_data[field_name].z_score = 0.0

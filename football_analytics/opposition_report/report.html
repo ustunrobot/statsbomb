@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Opponent Intelligence Report</title>
+        <style>
+
+    :root {
+      --ink: #0f1923;
+      --accent: #1a4fa3;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #f5f5f5;
+      padding: 20px;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .a4-container {
+      width: 210mm;
+      background: white;
+      margin: 0 auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: visible;
+    }
+
+    .cover {
+      display: grid;
+      grid-template-columns: 6px 1fr;
+      min-height: 160px;
+      background: var(--ink);
+      color: white;
+      padding: 40px 48px 36px 42px;
+      gap: 0 24px;
+      align-items: start;
+    }
+
+    .cover-stripe {
+      background: var(--accent);
+    }
+
+    .cover-content {
+    }
+
+    .cover-eyebrow {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: .12em;
+      color: rgba(255,255,255,.5);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .cover-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 8px;
+      color: #6fa0e8;
+    }
+
+    .cover-title span {
+      color: #6fa0e8;
+    }
+
+    .cover-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: rgba(255,255,255,.6);
+      margin-top: 6px;
+    }
+
+    .cover-meta {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: rgba(255,255,255,.55);
+      margin-top: 16px;
+      display: flex;
+      gap: 24px;
+    }
+
+    .cover-meta b {
+      color: rgba(255,255,255,.8);
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+      .a4-container {
+        width: 100%;
+        box-shadow: none;
+        margin: 0;
+      }
+    }
+    
+
+    
+    .s0-derived-metrics-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+      page-break-after: always;
+    }
+
+    .s0-section-container {
+      max-width: 1000px;
+    }
+
+    .s0-section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .s0-section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .s0-derived-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .s0-metric-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 12px;
+      background: white;
+    }
+
+    .s0-metric-card.s0-metric-card-light-teal {
+      background: #ecfbfd;
+      border: none;
+    }
+
+    .s0-metric-card.s0-metric-card-light-brick {
+      background: #fdf2ed;
+      border: none;
+    }
+
+    .s0-metric-card.s0-metric-card-light-gray-custom {
+      background: #f5f7fa;
+      border: none;
+    }
+
+    .s0-metric-card.s0-metric-card-light-lavender {
+      background: #fef7ff;
+      border: none;
+    }
+
+    .s0-metric-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #777777;
+      font-weight: 500;
+      margin-bottom: 6px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .s0-metric-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f1923;
+      margin-bottom: 6px;
+    }
+
+    .s0-metric-card-zscore {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      color: #999;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .s0-metric-label-left {
+      text-align: left;
+      flex: 1;
+    }
+
+    .s0-metric-percentile-right {
+      text-align: right;
+      flex: 0 0 auto;
+    }
+
+    .s0-metric-card-bar {
+      height: 18px;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .s0-metric-card-bar-background {
+      width: 100%;
+      height: 5px;
+      background: #e5e5e5;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .s0-metric-card-bar-center {
+      position: absolute;
+      left: 50%;
+      top: -3px;
+      width: 1.5px;
+      height: 11px;
+      background: #999;
+      transform: translateX(-50%);
+    }
+
+    .s0-metric-card-bar-fill {
+      position: absolute;
+      top: 0;
+      height: 5px;
+      border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+
+    .s0-metric-card-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 8px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+    }
+
+    .s0-metric-card-bar-label-left {
+      text-align: left;
+    }
+
+    .s0-metric-card-bar-label-right {
+      text-align: right;
+    }
+    
+    
+
+    
+    .metrics-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .section-container {
+      max-width: 1000px;
+    }
+
+    .section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .metric-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 11px;
+      background: white;
+    }
+
+    .metric-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      font-weight: 500;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f1923;
+      margin-bottom: 5px;
+    }
+
+    .metric-card-zscore {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    .metric-card-bar {
+      height: 17px;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .metric-card-bar-background {
+      width: 100%;
+      height: 6px;
+      background: #e5e5e5;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .metric-card-bar-center {
+      position: absolute;
+      left: 50%;
+      top: -4px;
+      width: 2px;
+      height: 14px;
+      background: #999;
+      transform: translateX(-50%);
+    }
+
+    .metric-card-bar-fill {
+      position: absolute;
+      top: 0;
+      height: 6px;
+      border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+    
+    
+
+    
+    .s3-radar-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+      page-break-after: always;
+    }
+
+    .s3-section-container {
+      max-width: 1000px;
+    }
+
+    .s3-section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .s3-section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .s3-radar-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .s3-radar-chart-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .s3-radar-chart {
+      max-width: 100%;
+      height: auto;
+    }
+    
+    
+
+    
+    .shot-type-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+      page-break-after: always;
+    }
+
+    .section-container {
+      max-width: 1000px;
+    }
+
+    .section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .shot-type-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .chart-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .pie-chart {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .shot-type-details-box {
+      background: white;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 320px;
+      overflow-y: auto;
+    }
+
+    .details-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .details-header {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 0;
+      padding-top: 4px;
+    }
+
+    .details-items {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .detail-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+    }
+
+    .detail-item-label {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .detail-item-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: #0f1923;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .detail-item-percentile {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      font-weight: 500;
+      color: #999;
+      display: inline;
+      margin-right: 2px;
+    }
+
+    .additional-metrics-section {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .additional-metrics-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0 0 16px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .additional-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .metric-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 12px;
+      background: white;
+    }
+
+    .metric-card.metric-card-light-gray {
+      background: #e8fbfd;
+    }
+
+    .metric-card.metric-card-light-teal {
+      background: #ecfbfd;
+      border: none;
+    }
+
+    .metric-card.metric-card-light-brick {
+      background: #fdf2ed;
+      border: none;
+    }
+
+    .metric-card.metric-card-light-gray-custom {
+      background: #f5f7fa;
+      border: none;
+    }
+
+    .metric-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      font-weight: 500;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f1923;
+      margin-bottom: 6px;
+    }
+
+    .metric-card-zscore {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    .metric-card-bar {
+      height: 18px;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .metric-card-bar-background {
+      width: 100%;
+      height: 5px;
+      background: #e5e5e5;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .metric-card-bar-center {
+      position: absolute;
+      left: 50%;
+      top: -3px;
+      width: 1.5px;
+      height: 11px;
+      background: #999;
+      transform: translateX(-50%);
+    }
+
+    .metric-card-bar-fill {
+      position: absolute;
+      top: 0;
+      height: 5px;
+      border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+    
+    
+
+    
+    .defending-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .section-container {
+      max-width: 1000px;
+    }
+
+    .section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .defending-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .defensive-flow-container {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e5e5;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .defensive-group-container {
+      border: 2px solid #d9d9d9;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .defensive-group-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .defensive-group-flex {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .defensive-flow-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 9px;
+      justify-content: start;
+    }
+
+    .defensive-flow-arrow-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 9px;
+      justify-content: start;
+    }
+
+    .defensive-action-card {
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .def-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.85;
+    }
+
+    .def-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .def-card-percentile {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      opacity: 0.8;
+    }
+
+    .flow-arrow {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .metric-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 11px;
+      background: white;
+    }
+
+    .metric-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      font-weight: 500;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f1923;
+      margin-bottom: 5px;
+    }
+
+    .metric-card-zscore {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    .metric-card-bar {
+      height: 17px;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .metric-card-bar-background {
+      width: 100%;
+      height: 5px;
+      background: #e5e5e5;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .metric-card-bar-center {
+      position: absolute;
+      left: 50%;
+      top: -3px;
+      width: 1.5px;
+      height: 11px;
+      background: #999;
+      transform: translateX(-50%);
+    }
+
+    .metric-card-bar-fill {
+      position: absolute;
+      top: 0;
+      height: 5px;
+      border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+    
+    
+
+    
+    .pressing-heatmap-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+      page-break-after: always;
+    }
+
+    .section-container {
+      max-width: 1000px;
+    }
+
+    .section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .heatmap-container {
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+      background: transparent;
+      padding: 0;
+      gap: 24px;
+    }
+
+    .pitch-wrapper {
+      position: relative;
+      width: 300px;
+      height: 204px;
+      background: white;
+      border-radius: 0;
+      overflow: hidden;
+      box-shadow: none;
+      flex-shrink: 0;
+    }
+
+    .stats-box {
+      width: 204px;
+      height: 204px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      background: white;
+      flex-shrink: 0;
+    }
+
+    .pitch-svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .heatmap-overlay {
+      width: 100%;
+      height: 100%;
+      mix-blend-mode: normal;
+    }
+    
+    
+
+    
+    .passing-section {
+      padding: 40px 48px;
+      background: white;
+      border-top: 1px solid #e5e5e5;
+      page-break-after: always;
+    }
+
+    .section-container {
+      max-width: 1000px;
+    }
+
+    .section-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .section-subtitle {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .passing-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+
+    .metric-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 11px;
+      background: white;
+    }
+
+    .metric-card-name {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      font-weight: 500;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-card-value {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f1923;
+      margin-bottom: 5px;
+    }
+
+    .metric-card-zscore {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    .metric-card-bar {
+      height: 17px;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .metric-card-bar-background {
+      width: 100%;
+      height: 5px;
+      background: #e5e5e5;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .metric-card-bar-center {
+      position: absolute;
+      left: 50%;
+      top: -3px;
+      width: 1.5px;
+      height: 11px;
+      background: #999;
+      transform: translateX(-50%);
+    }
+
+    .metric-card-bar-fill {
+      position: absolute;
+      top: 0;
+      height: 5px;
+      border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+
+    .subsection-title {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: #0f1923;
+      margin-top: 32px;
+      margin-bottom: 4px;
+    }
+
+    .passing-network-svg {
+      width: 100%;
+      max-width: 680px;
+      height: auto;
+      display: block;
+      margin-top: 16px;
+    }
+    
+    
+</style>
+    </head>
+    <body>
+        <div class="a4-container">
+            
+            
+    <section class="cover">
+        <div class="cover-stripe"></div>
+        <div class="cover-content">
+            <div class="cover-eyebrow">
+                Opponent Intelligence Report
+            </div>
+            <h1 class="cover-title">
+                Crawley Town
+            </h1>
+            <div class="cover-subtitle">
+                League - 2026-2027 - StatsBomb Data
+            </div>
+            <div class="cover-meta">
+                <span><b>1</b> Matches Analyzed</span>
+                <span><b>24</b> Teams in League</span>
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s3-radar-section">
+        <div class="s3-section-container">
+            <h2 class="s3-section-title"></h2>
+            <p class="s3-section-subtitle">More attacking metrics for Crawley Town</p>
+
+            <div class="s3-radar-container">
+                <div class="s3-radar-chart-wrapper">
+                    
+    <svg width="320" height="320" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" class="radar-chart">
+        <!-- Background with border -->
+        <rect width="320" height="320" fill="white" stroke="#d9d9d9" stroke-width="1"/>
+
+        <!-- Grid circles and levels -->
+            <circle cx="160.0" cy="160.0" r="18.2" fill="none" stroke="#e5e5e5" stroke-width="1"/>
+        <text x="168.0" y="146.8" font-family="Inter, sans-serif" font-size="8" fill="#999">20%</text>
+        <circle cx="160.0" cy="160.0" r="36.4" fill="none" stroke="#e5e5e5" stroke-width="1"/>
+        <text x="168.0" y="128.6" font-family="Inter, sans-serif" font-size="8" fill="#999">40%</text>
+        <circle cx="160.0" cy="160.0" r="54.6" fill="none" stroke="#e5e5e5" stroke-width="1"/>
+        <text x="168.0" y="110.4" font-family="Inter, sans-serif" font-size="8" fill="#999">60%</text>
+        <circle cx="160.0" cy="160.0" r="72.8" fill="none" stroke="#e5e5e5" stroke-width="1"/>
+        <text x="168.0" y="92.2" font-family="Inter, sans-serif" font-size="8" fill="#999">80%</text>
+        <circle cx="160.0" cy="160.0" r="91.0" fill="none" stroke="#e5e5e5" stroke-width="1"/>
+        <text x="168.0" y="74.0" font-family="Inter, sans-serif" font-size="8" fill="#999">100%</text>
+        <line x1="160.0" y1="160.0" x2="160.0" y2="69.0" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="231.1466649045907" y2="103.26242803085526" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="248.71844000854594" y2="180.2494049900246" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="199.4834202596978" y2="241.98816697912014" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="120.51657974030222" y2="241.98816697912014" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="71.28155999145405" y2="180.24940499002463" stroke="#e5e5e5" stroke-width="1"/>
+        <line x1="160.0" y1="160.0" x2="88.85333509540928" y2="103.26242803085526" stroke="#e5e5e5" stroke-width="1"/>
+        <polygon points="160.0,92.73913043478261 197.11999908065602,130.39778853783753 175.42929391452972,163.52163565043907 173.73336356859053,188.51762329708527 146.26663643140947,188.51762329708527 94.42550086324864,174.96695151436603 101.22666812229463,113.12983185157609" fill="#1a4fa3" fill-opacity="0.3" stroke="#1a4fa3" stroke-width="2"/>
+        <circle cx="160.0" cy="92.73913043478261" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="197.11999908065602" cy="130.39778853783753" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="175.42929391452972" cy="163.52163565043907" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="173.73336356859053" cy="188.51762329708527" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="146.26663643140947" cy="188.51762329708527" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="94.42550086324864" cy="174.96695151436603" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <circle cx="101.22666812229463" cy="113.12983185157609" r="4" fill="#1a4fa3" stroke="white" stroke-width="1.5"/>
+        <text x="160.0" y="44.0" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Passes into Box pG</text>
+        <text x="160.0" y="56.0" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#27ae60" text-anchor="middle" dominant-baseline="middle">2.8</text>
+        <text x="250.69245196629146" y="87.67518298438692" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Non-Penalty xG</text>
+        <text x="250.69245196629146" y="99.67518298438692" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#666666" text-anchor="middle" dominant-baseline="middle">1.2</text>
+        <text x="273.09163781309155" y="185.81242833893248" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Shot Distance</text>
+        <text x="273.09163781309155" y="197.81242833893248" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#e74c3c" text-anchor="middle" dominant-baseline="middle">15.7</text>
+        <text x="210.33051373763675" y="264.51238867668064" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Counterattack Shots</text>
+        <text x="210.33051373763675" y="276.51238867668064" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#e74c3c" text-anchor="middle" dominant-baseline="middle">0.8</text>
+        <text x="109.66948626236326" y="264.51238867668064" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">xGD pG</text>
+        <text x="109.66948626236326" y="276.51238867668064" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#e74c3c" text-anchor="middle" dominant-baseline="middle">-0.2</text>
+        <text x="46.90836218690846" y="185.81242833893248" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Deep Completions pG</text>
+        <text x="46.90836218690846" y="197.81242833893248" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#27ae60" text-anchor="middle" dominant-baseline="middle">4.2</text>
+        <text x="69.30754803370853" y="87.67518298438694" font-family="Inter, sans-serif" font-size="10" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="middle">Crosses into Box pG</text>
+        <text x="69.30754803370853" y="99.67518298438694" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#27ae60" text-anchor="middle" dominant-baseline="middle">13.4</text>
+    </svg>
+
+                </div>
+                <div class="s3-radar-chart-wrapper">
+                    
+    <svg width="320" height="320" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" class="scatter-chart">
+        <!-- Background with border -->
+        <rect width="320" height="320" fill="white" stroke="#d9d9d9" stroke-width="1"/>
+
+        <!-- Axes (3 shades darker) -->
+        <line x1="40" y1="280" x2="280" y2="280" stroke="#808080" stroke-width="1"/>
+        <line x1="40" y1="40" x2="40" y2="280" stroke="#808080" stroke-width="1"/>
+
+        <!-- Grid lines at 0 (center, 2 shades darker) -->
+        <line x1="160.0" y1="40" x2="160.0" y2="280" stroke="#bfbfbf" stroke-width="1" stroke-dasharray="2,2"/>
+        <line x1="40" y1="160.0" x2="280" y2="160.0" stroke="#bfbfbf" stroke-width="1" stroke-dasharray="2,2"/>
+
+        <!-- Axis labels (3 shades darker) -->
+        <text x="285" y="284" font-family="Inter, sans-serif" font-size="9" fill="#555555">xGF</text>
+        <text x="20" y="35" font-family="Inter, sans-serif" font-size="9" fill="#555555">xGA</text>
+
+        <!-- Scale labels (3 shades darker) -->
+        <text x="37" y="292" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="end">-2</text>
+        <text x="161.0" y="292" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="middle">0</text>
+        <text x="281" y="292" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="start">+2</text>
+
+        <text x="35" y="42" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="end">+2</text>
+        <text x="35" y="162.0" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="end">0</text>
+        <text x="35" y="282" font-family="Inter, sans-serif" font-size="8" fill="#808080" text-anchor="end">-2</text>
+        </svg>
+
+                </div>
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+            
+    <section class="s0-derived-metrics-section">
+        <div class="s0-section-container">
+            <h2 class="s0-section-title">Attacking</h2>
+            <p class="s0-section-subtitle">Chance creation metrics for Crawley Town</p>
+
+            <div class="s0-derived-metrics-grid">
+                
+            <div class="s0-metric-card s0-metric-card-light-teal">
+                <div class="s0-metric-card-name">Expected Goals</div>
+                <div class="s0-metric-card-value">0.81</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xG per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 32.581053840574114%; width: 17.418946159425886%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-brick">
+                <div class="s0-metric-card-name">Shot Volume</div>
+                <div class="s0-metric-card-value">9.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Shots per Game</span>
+                    <span class="s0-metric-percentile-right">P: (26%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 29.302589178106565%; width: 20.697410821893435%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-gray-custom">
+                <div class="s0-metric-card-name">Shot Quality</div>
+                <div class="s0-metric-card-value">0.09</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">xGF per Shot</span>
+                    <span class="s0-metric-percentile-right">P: (43%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 44.04496686410954%; width: 5.95503313589046%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            <div class="s0-metric-card s0-metric-card-light-lavender">
+                <div class="s0-metric-card-name">Finishing</div>
+                <div class="s0-metric-card-value">0.00</div>
+                <div class="s0-metric-card-zscore">
+                    <span class="s0-metric-label-left">Goals per xGF</span>
+                    <span class="s0-metric-percentile-right">P: (30%)</span>
+                </div>
+                <div class="s0-metric-card-bar">
+                    <div class="s0-metric-card-bar-background">
+                        <div class="s0-metric-card-bar-center"></div>
+                        <div class="s0-metric-card-bar-fill" style="left: 24.624698235474035%; width: 25.375301764525965%; background-color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <div class="s0-metric-card-bar-labels">
+                    <span class="s0-metric-card-bar-label-left"></span>
+                    <span class="s0-metric-card-bar-label-right"></span>
+                </div>
+            </div>
+        
+            </div>
+        </div>
+    </section>
+    
+    
+        </div>
+    </body>
+    </html>
+    

@@ -1,7 +1,7 @@
 """Chance Quality findings."""
 
 from typing import Dict, List
-from .xg_findings_base import Finding, register_evaluator, register_evidence, get_metric
+from .xg_findings_base import Finding, register_evaluator, register_evidence, get_metric, create_percentile_findings
 
 
 def get_chance_quality_evidence(finding_name: str, team_metrics: Dict) -> str:
@@ -33,45 +33,13 @@ def evaluate_chance_quality(team_id: int, team_name: str, team_metrics: Dict,
                             get_value, get_pct) -> List[Finding]:
     """Evaluate shot quality findings."""
     findings = []
+    category = "Chance Quality"
 
     xgf_per_shot_pct = get_pct(get_metric(team_metrics, 'xgf_per_shot') or team_metrics.get('xgf_per_shot'))
     xgf_open_play_per_open_shots_pct = get_pct(get_metric(team_metrics, 'xgf_open_play_per_open_shots') or team_metrics.get('xgf_open_play_per_open_shots'))
 
-    # Overall shot quality
-    if xgf_per_shot_pct >= 80:
-        findings.append(Finding(
-            category="Chance Quality",
-            finding_name="High shot quality",
-            description="Team's average shot carries high expected-goal value.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-    if xgf_per_shot_pct <= 20:
-        findings.append(Finding(
-            category="Chance Quality",
-            finding_name="Low shot quality",
-            description="Team takes many relatively low-value shots.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-
-    # Open play shot quality
-    if xgf_open_play_per_open_shots_pct >= 80:
-        findings.append(Finding(
-            category="Chance Quality",
-            finding_name="High open play shot quality",
-            description="Team's open play shots carry high expected-goal value.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-    if xgf_open_play_per_open_shots_pct <= 20:
-        findings.append(Finding(
-            category="Chance Quality",
-            finding_name="Low open play shot quality",
-            description="Team's open play shots carry low expected-goal value.",
-            team_id=team_id,
-            team_name=team_name
-        ))
+    findings.extend(create_percentile_findings(xgf_per_shot_pct, 80, 20, "shot quality", category, team_id, team_name))
+    findings.extend(create_percentile_findings(xgf_open_play_per_open_shots_pct, 80, 20, "open play shot quality", category, team_id, team_name))
 
     return findings
 

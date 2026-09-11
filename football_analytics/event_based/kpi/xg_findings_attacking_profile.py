@@ -1,6 +1,6 @@
 """Attacking Profile findings."""
 
-from .xg_findings_base import Finding, register_evaluator, register_evidence, get_metric
+from .xg_findings_base import Finding, register_evaluator, register_evidence, get_metric, create_percentile_findings
 from typing import Dict, List
 
 
@@ -36,45 +36,13 @@ def evaluate_attacking_profile(team_id: int, team_name: str, team_metrics: Dict,
                                get_value, get_pct) -> List[Finding]:
     """Evaluate attacking profile findings."""
     findings = []
+    category = "Attacking Profile"
 
     xgf_set_piece_ratio_pct = get_pct(get_metric(team_metrics, 'xgf_set_piece_ratio') or team_metrics.get('xgf_set_piece_ratio'))
     xgf_open_play_ratio_pct = get_pct(get_metric(team_metrics, 'xgf_open_play_ratio') or team_metrics.get('xgf_open_play_ratio'))
 
-    # Set piece xGF ratio
-    if xgf_set_piece_ratio_pct >= 80:
-        findings.append(Finding(
-            category="Attacking Profile",
-            finding_name="High set-piece xgf ratio",
-            description="Large proportion of attacking xGF comes from set pieces.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-    if xgf_set_piece_ratio_pct <= 20:
-        findings.append(Finding(
-            category="Attacking Profile",
-            finding_name="Low set-piece xgf ratio",
-            description="Small proportion of attacking xGF comes from set pieces.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-
-    # Open play xGF ratio
-    if xgf_open_play_ratio_pct >= 80:
-        findings.append(Finding(
-            category="Attacking Profile",
-            finding_name="High open play xgf ratio",
-            description="Large proportion of attacking xGF comes from open play.",
-            team_id=team_id,
-            team_name=team_name
-        ))
-    if xgf_open_play_ratio_pct <= 20:
-        findings.append(Finding(
-            category="Attacking Profile",
-            finding_name="Low open play xgf ratio",
-            description="Small proportion of attacking xGF comes from open play.",
-            team_id=team_id,
-            team_name=team_name
-        ))
+    findings.extend(create_percentile_findings(xgf_set_piece_ratio_pct, 80, 20, "set-piece xgf ratio", category, team_id, team_name))
+    findings.extend(create_percentile_findings(xgf_open_play_ratio_pct, 80, 20, "open play xgf ratio", category, team_id, team_name))
 
     return findings
 
