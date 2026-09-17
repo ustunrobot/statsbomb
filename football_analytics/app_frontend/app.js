@@ -298,10 +298,10 @@ async function loadTeams(competitionId, seasonId) {
     }
 }
 
-async function generateOppositionReportWithProgress(requestBody) {
+async function generateReportWithProgress(endpoint, requestBody) {
     return new Promise((resolve, reject) => {
         // Use fetch with streaming response instead of EventSource
-        fetch(`${API_BASE_URL}/reports/opposition`, {
+        fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -338,7 +338,7 @@ async function generateOppositionReportWithProgress(requestBody) {
                                         console.log(`Progress: ${message} (${percent}%)`);
 
                                     } else if (data.status === 'success') {
-                                        console.log(`✓ Opposition report generated:`, data);
+                                        console.log(`✓ Report generated:`, data);
                                         finalResponse = data;
                                         resolve(data);
 
@@ -371,6 +371,14 @@ async function generateOppositionReportWithProgress(requestBody) {
             reject(error);
         });
     });
+}
+
+async function generateOppositionReportWithProgress(requestBody) {
+    return generateReportWithProgress('/reports/opposition', requestBody);
+}
+
+async function generatePlayerReportWithProgress(requestBody) {
+    return generateReportWithProgress('/reports/player-stats', requestBody);
 }
 
 async function downloadTeamEventsWithProgress(competitionId, seasonId, teamName) {
@@ -609,52 +617,33 @@ async function generateReport() {
 
             console.log(`Sending player stats report request:`, requestBody);
 
-            // Send request to generate reports (team stats + player stats)
-            updateStatusDisplay(`Downloading statistics for ${team.name}...`, 20);
-            const response = await apiCall('/reports/player-stats', 'POST', requestBody);
+            // Generate player report with progress tracking
+            updateStatusDisplay(`Generating player reports for ${team.name}...`, 20);
+            const response = await generatePlayerReportWithProgress(requestBody);
+
+            appState.isGenerating = false;
 
             if (response.status !== 'success') {
                 throw new Error(response.message || 'Failed to generate report');
             }
 
-            // Now generate match data for the team with progress tracking
-            updateStatusDisplay(`Downloading match data for ${team.name}... (0/0)`, 30);
-            console.log(`Generating event files for team ${team.name}...`);
+            console.log(`✓ Player report generated:`, response);
+            updateStatusDisplay(`✓ Player report generated for ${team.name}!`, 100);
 
+            // Open report in new tab using API endpoint
             try {
-                const eventsResponse = await downloadTeamEventsWithProgress(
-                    parseInt(appState.selectedCompetition),
-                    parseInt(appState.selectedSeasonId),
-                    team.name
-                );
-
-                appState.isGenerating = false;
-
-                if (eventsResponse.status === 'success') {
-                    console.log(`✓ All files generated:`, response, eventsResponse);
-                    updateStatusDisplay(`✓ Download complete for ${team.name}!`, 100);
-
-                    // Show success with all files
-                    showResult(
-                        response.team_stats_filepath,
-                        response.player_stats_filepath,
-                        eventsResponse.event_files,
-                        eventsResponse.count
-                    );
-                } else {
-                    // Show partial success with stats but no events
-                    console.warn('Events generation failed, showing stats only');
-                    updateStatusDisplay(`✓ Download complete for ${team.name}! (events unavailable)`, 100);
-                    showResult(
-                        response.team_stats_filepath,
-                        response.player_stats_filepath,
-                        [],
-                        0
-                    );
-                }
+                window.open(`${API_BASE_URL}/reports/opposition-html`, '_blank');
             } catch (error) {
-                console.error('Error downloading events:', error);
-                appState.isGenerating = false;
+                console.error('Failed to open report in new tab:', error);
+            }
+
+            showResult(
+                response.report_filepath,
+                null,
+                [],
+                0,
+                'player'
+            );
                 // Show partial success with stats
                 updateStatusDisplay(`✓ Download complete (events failed)`, 100);
                 showResult(
