@@ -10,7 +10,7 @@
 // Detect API base URL dynamically
 const API_BASE_URL = window.location.origin + '/api';
 const POLL_INTERVAL = 2000; // 2 seconds
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT = 300000; // 5 minutes
 
 console.log('API Base URL:', API_BASE_URL);
 
@@ -298,6 +298,81 @@ async function loadTeams(competitionId, seasonId) {
     }
 }
 
+async function generateOppositionReportWithProgress(requestBody) {
+    return new Promise((resolve, reject) => {
+        // Use fetch with streaming response instead of EventSource
+        fetch(`${API_BASE_URL}/reports/opposition`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+        }).then(response => {
+            if (!response.ok) {
+                reject(new Error(`HTTP ${response.status}: ${response.statusText}`));
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let finalResponse = null;
+
+            const processStream = async () => {
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const text = decoder.decode(value, { stream: true });
+                        const lines = text.split('\n');
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.substring(6));
+
+                                    if (data.status === 'progress') {
+                                        const percent = data.percent || 0;
+                                        const message = data.message || 'Generating report...';
+                                        updateStatusDisplay(message, percent);
+                                        console.log(`Progress: ${message} (${percent}%)`);
+
+                                    } else if (data.status === 'success') {
+                                        console.log(`✓ Opposition report generated:`, data);
+                                        finalResponse = data;
+                                        resolve(data);
+
+                                    } else if (data.status === 'error') {
+                                        console.error('Report generation error:', data.message);
+                                        reject(new Error(data.message));
+                                    }
+                                } catch (parseError) {
+                                    // Silently ignore parse errors for non-JSON lines
+                                }
+                            }
+                        }
+                    }
+
+                    // Ensure we have a final response
+                    if (finalResponse) {
+                        resolve(finalResponse);
+                    } else {
+                        reject(new Error('Report generation stream ended without success'));
+                    }
+                } catch (error) {
+                    console.error('Stream reading error:', error);
+                    reject(error);
+                }
+            };
+
+            processStream();
+        }).catch(error => {
+            console.error('Fetch error:', error);
+            reject(error);
+        });
+    });
+}
+
 async function downloadTeamEventsWithProgress(competitionId, seasonId, teamName) {
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(
@@ -491,36 +566,45 @@ async function generateReport() {
             };
 
             console.log(`Sending opposition report request:`, requestBody);
-            updateStatusDisplay(`Generating opposition report for ${team.name}...`, 50);
 
-            const response = await apiCall('/reports/opposition', 'POST', requestBody);
+            try {
+                const response = await generateOppositionReportWithProgress(requestBody);
+                appState.isGenerating = false;
 
-            if (response.status !== 'success') {
-                throw new Error(response.message || 'Failed to generate opposition report');
+                if (response.status !== 'success') {
+                    throw new Error(response.message || 'Failed to generate opposition report');
+                }
+
+                console.log(`✓ Opposition report generated:`, response);
+                updateStatusDisplay(`✓ Opposition report generated for ${team.name}!`, 100);
+
+                // Open report in new tab using API endpoint
+                try {
+                    window.open(`${API_BASE_URL}/reports/opposition-html`, '_blank');
+                } catch (error) {
+                    console.error('Failed to open report in new tab:', error);
+                }
+
+                showResult(
+                    response.report_filepath,
+                    null,
+                    [],
+                    0,
+                    'opposition'
+                );
+            } catch (error) {
+                throw error;
             }
-
-            appState.isGenerating = false;
-            console.log(`✓ Opposition report generated:`, response);
-            updateStatusDisplay(`✓ Opposition report generated for ${team.name}!`, 100);
-
-            // Open report in new tab if HTML content is available
-            if (response.html_content) {
-                openReportInNewTab(response.html_content);
-            }
-
-            showResult(
-                response.report_filepath,
-                null,
-                [],
-                0,
-                'opposition'
-            );
         } else {
             // Handle player stats reports
             const requestBody = {
                 competition_id: parseInt(appState.selectedCompetition),
                 season_id: parseInt(appState.selectedSeasonId),
                 team_name: team.name,
+                season_name: competition.season,
+                league_name: competition.league,
+                report_type: "player",
+                player_id: appState.selectedPlayer ? parseInt(appState.selectedPlayer) : null,
             };
 
             console.log(`Sending player stats report request:`, requestBody);
@@ -711,6 +795,7 @@ async function downloadFullSeason() {
         // Update result message with summary
         const resultMessage = `📊 Teams Match Data: ${successCount}/${appState.teams.length}
 📋 Season Statistics: 1 set (all teams combined)
+📅 Season Matches: 1 file (all competition matches)
 📹 Total Match Data Files: ${totalEventFiles}
 
 ${failureCount > 0 ? `⚠️ ${failureCount} team(s) had download issues\n` : ''}All files have been saved to data_temp folder and are ready for analysis.`;
@@ -852,6 +937,7 @@ async function downloadWeeklyData() {
 
             // Update result message
             const resultMessage = `📋 Season Statistics: 1 set (all teams combined)
+📅 Season Matches: 1 file (all competition matches)
 📹 Match Data Files: ${weekResponse.count}
 
 All files have been saved to data_temp folder organized by team.`;

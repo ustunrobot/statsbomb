@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Import backend services
 from app_backend.statsbomb_service import get_service as get_statsbomb_service
-from utils.data_loader import get_season_stats, get_player_season_data, get_team_data, fetch_events_with_360
+from utils.data_loader import get_season_stats, get_player_season_data, get_season_matches, get_team_data, fetch_events_with_360
 
 # Configuration
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -285,12 +285,20 @@ def generate_report():
             creds=creds
         )
 
-        logger.info(f"✓ Reports generated: Team={team_stats_filepath}, Players={player_stats_filepath}")
+        matches_filepath = get_season_matches(
+            competition_id=competition_id,
+            season_id=season_id,
+            data_dir=str(data_temp_dir),
+            creds=creds
+        )
+
+        logger.info(f"✓ Reports generated: Team={team_stats_filepath}, Players={player_stats_filepath}, Matches={matches_filepath}")
 
         return jsonify({
             'status': 'success',
             'team_stats_filepath': str(team_stats_filepath),
             'player_stats_filepath': str(player_stats_filepath),
+            'matches_filepath': str(matches_filepath),
             'message': f'Reports generated successfully'
         })
 
@@ -306,75 +314,166 @@ def generate_report():
 @app.route('/api/reports/player-stats', methods=['POST'])
 def generate_player_stats():
     """
-    Generate both team and player season stats reports.
+    Generate player intelligence reports with progress tracking.
 
     Request body:
         - competition_id: int (required)
         - season_id: int (required)
-        - team_name: str (optional, for single team report)
+        - team_name: str (required)
+        - report_type: str (required, "player")
+        - player_id: int (optional, specific player or all team players if not provided)
 
     Returns:
-        JSON with filepaths of both generated reports
+        Server-Sent Events stream with progress updates
     """
+    import subprocess
+
+    # Extract parameters while still in request context (MUST be done before returning generator)
     try:
         data = request.get_json()
+        logger.info(f"Player report request data: {data}")
 
-        competition_id = int(data.get('competition_id'))
-        season_id = int(data.get('season_id'))
-        team_name = data.get('team_name')
-
-        if not competition_id or not season_id:
+        try:
+            competition_id = int(data.get('competition_id'))
+            season_id = int(data.get('season_id'))
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to parse competition_id or season_id: {e}")
             return jsonify({
                 'status': 'error',
-                'message': 'competition_id and season_id are required'
+                'message': 'competition_id and season_id must be valid integers'
             }), 400
 
-        logger.info(f"Generating reports for competition {competition_id}, season {season_id}, team {team_name}")
+        team_name = data.get('team_name')
+        season_name = data.get('season_name')
+        league_name = data.get('league_name')
+        report_type = data.get('report_type', 'player')
+        player_id = data.get('player_id')
 
-        # Create data_temp directory
-        data_temp_dir = Path(__file__).parent.parent / 'data_temp'
-        data_temp_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Extracted params - team: {team_name}, season: {season_name}, league: {league_name}, report_type: {report_type}, player_id: {player_id}")
 
-        # Get default credentials
-        creds = {
-            "user": "ustunrobot@gmail.com",
-            "passwd": "waQMIar2",
-        }
-
-        # Generate both team and player season stats
-        team_stats_filepath = get_season_stats(
-            competition_id=competition_id,
-            season_id=season_id,
-            data_dir=str(data_temp_dir),
-            team=team_name,
-            creds=creds
-        )
-
-        player_stats_filepath = get_player_season_data(
-            competition_id=competition_id,
-            season_id=season_id,
-            data_dir=str(data_temp_dir),
-            team=team_name,
-            creds=creds
-        )
-
-        logger.info(f"✓ Reports generated: Team={team_stats_filepath}, Players={player_stats_filepath}")
-
-        return jsonify({
-            'status': 'success',
-            'team_stats_filepath': str(team_stats_filepath),
-            'player_stats_filepath': str(player_stats_filepath),
-            'message': f'Reports generated successfully'
-        })
+        if not all([team_name, season_name, league_name, competition_id, season_id]):
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing required parameters: team_name, season_name, league_name, competition_id, season_id'
+            }), 400
 
     except Exception as e:
-        logger.error(f"Error generating reports: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Error extracting request parameters: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Failed to generate reports: {str(e)}'
-        }), 500
+            'message': f'Invalid request: {str(e)}'
+        }), 400
+
+    def progress_stream():
+        try:
+            season_name_clean = season_name.replace('/', '-')
+            logger.info(f"Generating player report for {team_name} in {season_name_clean} ({league_name})")
+
+            # Call run_report.py script
+            run_report_path = Path(__file__).parent.parent / 'opposition_report' / 'run_report.py'
+
+            # Build command with optional player_id
+            cmd = ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'player']
+            if player_id:
+                cmd.extend(['--player-id', str(player_id)])
+
+            logger.info(f"Executing: {' '.join(cmd)}")
+
+            yield f"data: {json.dumps({'status': 'progress', 'step': 1, 'percent': 5, 'message': f'Generating player reports for {team_name}...'})}\n\n"
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            html_content = None
+            current_step = 1
+            in_html = False
+            html_lines = []
+
+            # Read output line by line and stream progress
+            for line in process.stdout:
+                line_stripped = line.strip()
+
+                if not line_stripped:
+                    if in_html:
+                        html_lines.append(line)
+                    continue
+
+                logger.info(f"[run_report] {line_stripped}")
+
+                # Parse progress messages from run_report.py
+                if line_stripped.startswith('[PROGRESS]'):
+                    parts = line_stripped.replace('[PROGRESS]', '').strip().split('|')
+                    if len(parts) >= 3:
+                        step = int(parts[0])
+                        percent = int(parts[1])
+                        message = parts[2]
+                        current_step = step
+                        yield f"data: {json.dumps({'status': 'progress', 'step': step, 'percent': percent, 'message': message})}\n\n"
+
+                # Extract HTML markers
+                elif '<<<HTML_START>>>' in line_stripped:
+                    in_html = True
+                    html_lines = []
+                elif '<<<HTML_END>>>' in line_stripped:
+                    html_content = '\n'.join(html_lines)
+                    in_html = False
+                elif in_html:
+                    html_lines.append(line)
+
+            # Wait for process to finish (5 minute timeout)
+            try:
+                return_code = process.wait(timeout=300)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                logger.error("run_report.py execution timed out")
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Report generation timed out after 5 minutes'})}\n\n"
+                return
+
+            if return_code != 0:
+                logger.error(f"run_report.py failed with return code {return_code}")
+                yield f"data: {json.dumps({'status': 'error', 'message': f'Report generation failed'})}\n\n"
+                return
+
+            # Report should be saved to opposition_report/report.html
+            report_path = Path(__file__).parent.parent / 'opposition_report' / 'report.html'
+
+            logger.info(f"✓ Player report generated: {report_path}")
+
+            # Verify report file exists
+            report_exists = report_path.exists()
+            if report_exists:
+                report_size = report_path.stat().st_size
+                logger.info(f"✓ Report file verified: {report_size} bytes")
+            else:
+                logger.error(f"✗ Report file not found at {report_path}")
+
+            # If HTML was captured from stdout, note it but don't include in response (too large for JSON)
+            if html_content:
+                logger.info(f"✓ HTML content was captured: {len(html_content)} bytes")
+
+            # Send success with file path only (frontend will load HTML from file or view in new tab)
+            yield f"data: {json.dumps({'status': 'success', 'percent': 100, 'message': 'Report generated successfully!', 'report_filepath': str(report_path)})}\n\n"
+
+        except subprocess.TimeoutExpired:
+            logger.error("Report generation timed out")
+            yield f"data: {json.dumps({'status': 'error', 'message': 'Report generation timed out after 5 minutes'})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Error generating player report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            yield f"data: {json.dumps({'status': 'error', 'message': f'Error generating player report: {str(e)}'})}\n\n"
+
+    return make_response(
+        progress_stream(),
+        200,
+        {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache'}
+    )
 
 # ============================================================================
 # ROUTES: API - Status
@@ -618,7 +717,7 @@ def generate_week_events():
 @app.route('/api/reports/opposition', methods=['POST'])
 def generate_opposition_report():
     """
-    Generate opposition intelligence report for a team in a season.
+    Generate opposition intelligence report for a team with progress tracking.
 
     Request body:
         - competition_id: int (required)
@@ -629,15 +728,15 @@ def generate_opposition_report():
         - league_name: str (required, e.g., "EFL League Two")
 
     Returns:
-        JSON with path to generated report.html
+        Server-Sent Events stream with progress updates
     """
     import subprocess
 
+    # Extract parameters while still in request context (MUST be done before returning generator)
     try:
         data = request.get_json()
         logger.info(f"Opposition report request data: {data}")
 
-        # Extract and validate required parameters
         try:
             competition_id = int(data.get('competition_id'))
             season_id = int(data.get('season_id'))
@@ -657,89 +756,182 @@ def generate_opposition_report():
         if not all([team_name, season_name, league_name, competition_id, season_id]):
             return jsonify({
                 'status': 'error',
-                'message': 'team_name, season_name, league_name, competition_id, and season_id are required'
+                'message': 'Missing required parameters'
             }), 400
 
-        # Convert "/" to "-" in season name for compatibility
-        season_name = season_name.replace('/', '-')
-
-        logger.info(f"Generating opposition report for {team_name} in {season_name} ({league_name})")
-
-        # Call run_report.py script
-        run_report_path = Path(__file__).parent.parent / 'opposition_report' / 'run_report.py'
-
-        # Execute the script with all parameters
-        logger.info(f"Executing: python {run_report_path} '{team_name}' '{season_name}' '{league_name}' {competition_id} {season_id}")
-
-        result = subprocess.run(
-            ['python', str(run_report_path), team_name, season_name, league_name, str(competition_id), str(season_id)],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
-
-        # Log all output from the subprocess
-        if result.stdout:
-            logger.info(f"run_report.py stdout:\n{result.stdout}")
-        if result.stderr:
-            logger.info(f"run_report.py stderr:\n{result.stderr}")
-
-        if result.returncode != 0:
-            logger.error(f"run_report.py failed with return code {result.returncode}: {result.stderr}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Failed to generate opposition report: {result.stderr}'
-            }), 500
-
-        # Extract HTML from stdout if available
-        html_content = None
-        if result.stdout and '<<<HTML_START>>>' in result.stdout:
-            try:
-                start_idx = result.stdout.index('<<<HTML_START>>>') + len('<<<HTML_START>>>')
-                end_idx = result.stdout.index('<<<HTML_END>>>')
-                html_content = result.stdout[start_idx:end_idx].strip()
-                logger.info(f"✓ Extracted HTML from stdout ({len(html_content)} bytes)")
-            except (ValueError, IndexError) as e:
-                logger.warning(f"Failed to extract HTML from stdout: {e}")
-
-        # Report should also be saved to opposition_report/report.html
-        report_path = Path(__file__).parent.parent / 'opposition_report' / 'report.html'
-
-        if not report_path.exists():
-            logger.warning(f"Report file not found at {report_path}, but HTML may be available in response")
-
-        logger.info(f"✓ Opposition report generated: {report_path}")
-
-        return jsonify({
-            'status': 'success',
-            'report_filepath': str(report_path),
-            'html_content': html_content,  # Direct HTML for frontend display
-            'message': f'Opposition report generated successfully for {team_name}',
-            'debug': {
-                'stdout': result.stdout[-500:] if result.stdout else '',  # Last 500 chars
-                'stderr': result.stderr[-500:] if result.stderr else ''
-            }
-        })
-
-    except subprocess.TimeoutExpired:
-        logger.error("Report generation timed out")
-        return jsonify({
-            'status': 'error',
-            'message': 'Report generation timed out after 5 minutes'
-        }), 504
-
     except Exception as e:
-        logger.error(f"Error generating opposition report: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Error extracting request parameters: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Error generating opposition report: {str(e)}'
-        }), 500
+            'message': f'Invalid request: {str(e)}'
+        }), 400
+
+    def progress_stream():
+        try:
+            # Convert "/" to "-" in season name for compatibility
+            season_name_clean = season_name.replace('/', '-')
+
+            logger.info(f"Generating opposition report for {team_name} in {season_name_clean} ({league_name})")
+
+            # Call run_report.py script
+            run_report_path = Path(__file__).parent.parent / 'opposition_report' / 'run_report.py'
+
+            # Execute the script with all parameters
+            logger.info(f"Executing: python {run_report_path} '{team_name}' '{season_name_clean}' '{league_name}' {competition_id} {season_id}")
+
+            yield f"data: {json.dumps({'status': 'progress', 'step': 1, 'percent': 5, 'message': f'Loading data for {team_name}...'})}\n\n"
+
+            process = subprocess.Popen(
+                ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'team'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            html_content = None
+            current_step = 1
+            in_html = False
+            html_lines = []
+
+            # Read output line by line and stream progress
+            for line in process.stdout:
+                line_stripped = line.strip()
+
+                if not line_stripped:
+                    if in_html:
+                        html_lines.append(line)
+                    continue
+
+                logger.info(f"[run_report] {line_stripped}")
+
+                # Parse progress messages from run_report.py
+                if line_stripped.startswith('[PROGRESS]'):
+                    parts = line_stripped.replace('[PROGRESS]', '').strip().split('|')
+                    if len(parts) >= 3:
+                        step = int(parts[0])
+                        percent = int(parts[1])
+                        message = parts[2]
+                        current_step = step
+                        yield f"data: {json.dumps({'status': 'progress', 'step': step, 'percent': percent, 'message': message})}\n\n"
+
+                # Parse DataProvider messages
+                elif '[DataProvider]' in line_stripped:
+                    # Extract match info from DataProvider messages
+                    # Format: [DataProvider] Loaded match 2/72: Week1_Barnet_vs_Salford City.json
+                    try:
+                        if 'Loaded match' in line_stripped:
+                            # Extract the match count and filename
+                            parts = line_stripped.split('Loaded match')[1].strip()
+                            # parts should be "2/72: Week1_Barnet_vs_Salford City.json"
+                            if ':' in parts:
+                                count_part, file_part = parts.split(':', 1)
+                                file_part = file_part.strip()
+
+                                # Parse current/total from count_part (e.g., "2/72")
+                                if '/' in count_part:
+                                    try:
+                                        current_str, total_str = count_part.strip().split('/')
+                                        current = int(current_str)
+                                        total = int(total_str)
+                                        # Calculate progress: 20% to 60% for data loading
+                                        progress_percent = 20 + int((current / total) * 40)
+                                        message = f"Loading match data: {current}/{total} - {file_part}"
+                                        yield f"data: {json.dumps({'status': 'progress', 'step': 2, 'percent': progress_percent, 'message': message})}\n\n"
+                                    except ValueError:
+                                        pass
+                    except (ValueError, IndexError):
+                        pass
+
+                # Extract HTML markers
+                elif '<<<HTML_START>>>' in line_stripped:
+                    in_html = True
+                    html_lines = []
+                elif '<<<HTML_END>>>' in line_stripped:
+                    html_content = '\n'.join(html_lines)
+                    in_html = False
+                elif in_html:
+                    html_lines.append(line)
+
+            # Wait for process to finish (5 minute timeout)
+            try:
+                return_code = process.wait(timeout=300)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                logger.error("run_report.py execution timed out")
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Report generation timed out after 5 minutes'})}\n\n"
+                return
+
+            if return_code != 0:
+                logger.error(f"run_report.py failed with return code {return_code}")
+                yield f"data: {json.dumps({'status': 'error', 'message': f'Report generation failed'})}\n\n"
+                return
+
+            # Report should be saved to opposition_report/report.html
+            report_path = Path(__file__).parent.parent / 'opposition_report' / 'report.html'
+
+            logger.info(f"✓ Opposition report generated: {report_path}")
+
+            # Verify report file exists
+            report_exists = report_path.exists()
+            if report_exists:
+                report_size = report_path.stat().st_size
+                logger.info(f"✓ Report file verified: {report_size} bytes")
+            else:
+                logger.error(f"✗ Report file not found at {report_path}")
+
+            # If HTML was captured from stdout, note it but don't include in response (too large for JSON)
+            if html_content:
+                logger.info(f"✓ HTML content was captured: {len(html_content)} bytes")
+
+            # Send success with file path only (frontend will load HTML from file or view in new tab)
+            yield f"data: {json.dumps({'status': 'success', 'percent': 100, 'message': 'Report generated successfully!', 'report_filepath': str(report_path)})}\n\n"
+
+        except subprocess.TimeoutExpired:
+            logger.error("Report generation timed out")
+            yield f"data: {json.dumps({'status': 'error', 'message': 'Report generation timed out after 5 minutes'})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Error generating opposition report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            yield f"data: {json.dumps({'status': 'error', 'message': f'Error generating opposition report: {str(e)}'})}\n\n"
+
+    return make_response(
+        progress_stream(),
+        200,
+        {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache'}
+    )
 
 
 # ROUTES: API - Status
 # ============================================================================
+
+@app.route('/api/reports/opposition-html', methods=['GET'])
+def get_opposition_report_html():
+    """Serve the generated opposition report HTML."""
+    try:
+        report_path = Path(__file__).parent.parent / 'opposition_report' / 'report.html'
+
+        if not report_path.exists():
+            return jsonify({
+                'status': 'error',
+                'message': 'Report file not found'
+            }), 404
+
+        with open(report_path, 'r') as f:
+            html_content = f.read()
+
+        # Return as direct HTML response
+        response = make_response(html_content)
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return response
+    except Exception as e:
+        logger.error(f"Error serving opposition report: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to serve report: {str(e)}'
+        }), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
