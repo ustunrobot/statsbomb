@@ -94,18 +94,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initializeApp() {
     try {
+        console.log('Starting application initialization...');
+
         // Load competitions on startup
+        console.log('Loading competitions...');
         await loadCompetitions();
+        console.log('✓ Competitions loaded');
 
         // Attach event listeners
+        console.log('Attaching event listeners...');
         attachEventListeners();
+        console.log('✓ Event listeners attached');
 
         // Hide initial load spinner
+        console.log('Hiding splash screen...');
         hideInitialLoadSpinner();
+        console.log('✓ Splash screen hidden');
 
         console.log('✓ Application initialized successfully');
     } catch (error) {
         console.error('✗ Initialization failed:', error);
+        hideInitialLoadSpinner();
         showError('Initialization Error', 'Failed to initialize the application. Please refresh the page.');
     }
 }
@@ -644,15 +653,6 @@ async function generateReport() {
                 0,
                 'player'
             );
-                // Show partial success with stats
-                updateStatusDisplay(`✓ Download complete (events failed)`, 100);
-                showResult(
-                    response.team_stats_filepath,
-                    response.player_stats_filepath,
-                    [],
-                    0
-                );
-            }
         }
     } catch (error) {
         console.error('Error generating report:', error);
