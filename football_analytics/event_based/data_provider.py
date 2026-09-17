@@ -287,7 +287,7 @@ class DataProvider:
             std_dev = variance ** 0.5
 
             # Calculate threshold for z-score = -1.0
-            minutes_threshold = mean_minutes - std_dev if std_dev > 0 else 0
+            minutes_threshold = mean_minutes - (0.6 * std_dev) if std_dev > 0 else 0
             self.min_minutes_threshold = minutes_threshold
 
             # Filter players by minimum minutes threshold, but always keep the player being analyzed
@@ -595,13 +595,14 @@ class DataProvider:
                     else:
                         stats_list = list(player_stats.values()) if isinstance(player_stats, dict) else []
 
-                    # Filter players by team_name and extract player_id's
+                    # Filter players by team_name and extract player_id's, excluding goalkeepers
                     team_player_ids = [
                         p.get('player_id') for p in stats_list
                         if isinstance(p, dict) and p.get('team_name') == team_name and p.get('player_id')
+                        and p.get('primary_position') != 'Goalkeeper'
                     ]
 
-                    print(f"[DataProvider] ✓ Found {len(team_player_ids)} players for team '{team_name}'")
+                    print(f"[DataProvider] ✓ Found {len(team_player_ids)} players for team '{team_name}' (goalkeepers excluded)")
                     return team_player_ids
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[DataProvider] Error loading player stats file {player_stats_file}: {e}")
