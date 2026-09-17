@@ -146,7 +146,7 @@ def get_player_summary_metrics_to_display(player_stats: dict) -> dict:
     return metrics_to_display
 
 def render_minutes_info(player_stats: dict) -> str:
-    """Render minutes played info with warning if below threshold."""
+    """Render minutes played info with warning if below threshold as a single line."""
     minutes_played = player_stats.get('player_season_minutes')
     minutes_threshold = player_stats.get('minutes_threshold')
 
@@ -161,25 +161,24 @@ def render_minutes_info(player_stats: dict) -> str:
 
     minutes_int = int(minutes_value)
 
-    warning_class = ""
-    warning_html = ""
-
+    # Check if minutes are below threshold
+    is_below_threshold = False
     if minutes_threshold is not None:
         threshold_int = int(minutes_threshold)
-        if minutes_int < threshold_int:
-            warning_class = "s21-minutes-warning"
-            warning_html = f"""
-            <div class="s21-warning-message">
-                ⚠️ Player played <b>{minutes_int}</b> minutes, below the comparison threshold of <b>{threshold_int}</b> minutes.
-                <br/>This may affect the reliability of positional comparisons.
-            </div>
-            """
+        is_below_threshold = minutes_int < threshold_int
+
+    # Build the message
+    if is_below_threshold:
+        threshold_int = int(minutes_threshold)
+        message = f"⚠️ Minutes played: <span class=\"s21-minutes-value\">{minutes_int}</span> minutes (below threshold of {threshold_int} min - reliability may be affected)"
+        subtitle_class = "s21-section-subtitle s21-minutes-warning-text"
+    else:
+        message = f"Minutes played: <span class=\"s21-minutes-value\">{minutes_int}</span> minutes"
+        subtitle_class = "s21-section-subtitle"
 
     html = f"""
-    <div class="s21-minutes-info {warning_class}">
-        <p class="s21-minutes-label">Minutes Played:</p>
-        <p class="s21-minutes-value">{minutes_int} minutes</p>
-        {warning_html}
+    <div class="s21-subtitle-row">
+        <p class="{subtitle_class}">{message}</p>
     </div>
     """
     return html
@@ -441,48 +440,13 @@ def get_styles() -> str:
       text-align: right;
     }
 
-    .s21-minutes-info {
-      margin-top: 32px;
-      padding: 16px;
-      background: #f8fafc;
-      border-left: 4px solid #1a4fa3;
-      border-radius: 4px;
-      font-family: 'Inter', system-ui, sans-serif;
-    }
-
-    .s21-minutes-info.s21-minutes-warning {
-      border-left-color: #e74c3c;
-      background: #fef5f5;
-    }
-
-    .s21-minutes-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: #999;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin: 0 0 8px 0;
+    .s21-minutes-warning-text {
+      color: #e74c3c !important;
     }
 
     .s21-minutes-value {
-      font-size: 16px;
       font-weight: 700;
       color: var(--ink);
-      margin: 0 0 12px 0;
-    }
-
-    .s21-warning-message {
-      font-size: 12px;
-      color: #d32f2f;
-      background: white;
-      padding: 12px;
-      border-radius: 3px;
-      margin-top: 12px;
-      line-height: 1.5;
-    }
-
-    .s21-warning-message b {
-      font-weight: 700;
     }
 
     @media print {
