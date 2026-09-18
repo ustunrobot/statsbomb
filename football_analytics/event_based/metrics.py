@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional, List
 
 @dataclass
 class Metric:
@@ -14,6 +15,10 @@ class Metric:
     label2: str = ""
     bar_label_low: str = ""
     bar_label_high: str = ""
+    show_as_percentage: bool = False
+    reverse: bool = False
+    heatmap: Optional[List[List[float]]] = field(default=None)  # 20x30 grid (4m x 4m cells)
+    value_trend: Optional[List[float]] = field(default=None)  # Per-match history: one value per match
 
     @classmethod
     def default(cls):
@@ -30,5 +35,20 @@ class Metric:
             label="",
             label2="",
             bar_label_low="Low",
-            bar_label_high="High"
+            bar_label_high="High",
+            show_as_percentage=False,
+            reverse=False,
+            heatmap=None,
+            value_trend=None
         )
+
+    @classmethod
+    def create_empty_heatmap(cls) -> List[List[float]]:
+        """
+        Create an empty heatmap grid for pitch tracking.
+
+        Returns a 20x30 grid representing a 120m x 80m pitch divided into 4m x 4m cells:
+        - 20 rows (height: 80m / 4m)
+        - 30 columns (width: 120m / 4m)
+        """
+        return [[0.0 for _ in range(30)] for _ in range(20)]

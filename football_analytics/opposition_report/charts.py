@@ -706,8 +706,19 @@ def create_scatter_chart(all_metrics: dict, all_teams_statsbomb_metrics: dict, t
         x = z_score_to_x(crawley_town_data["x_z"])
         y = z_score_to_y(crawley_town_data["y_z"])
 
+        # Get Crawley Town ranking
+        crawley_rank = None
+        if league_table and "Crawley Town" in league_table:
+            crawley_rank = league_table["Crawley Town"].get('rank', '?')
+
         # Draw Crawley Town with blue styling
         svg += f'        <circle cx="{x}" cy="{y}" r="6" fill="none" stroke="#1a4fa3" stroke-width="2"/>\n'
+
+        # Add rank number inside circle if available
+        if crawley_rank:
+            svg += f'        <text x="{x}" y="{y}" font-family="Inter, sans-serif" font-size="8" font-weight="700" fill="#1a4fa3" text-anchor="middle" dominant-baseline="middle">{crawley_rank}</text>\n'
+
+        # Add Crawley Town label
         svg += f'        <text x="{x + 10}" y="{y - 8}" font-family="Inter, sans-serif" font-size="8" font-weight="600" fill="#1a4fa3">Crawley Town</text>\n'
 
     # Draw main team from all_metrics (using actual z-scores)

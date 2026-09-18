@@ -123,6 +123,13 @@ class XGField:
 #   'ratio' - value is already normalized (use value directly for value_pg)
 #   'total' - value is a total (divide by match count for value_pg)
 DERIVED_METRICS = {
+    'xgf_direct_total': {
+                'description': 'xGF total from direct shots',
+                'type': 'total',
+                'formula': lambda agg: (agg.get('xg_for_total', Metric.default()).value -
+                                       agg.get('xg_for_set_piece_total', Metric.default()).value -
+                                       agg.get('xg_for_open_play', Metric.default()).value)
+            },
     'xgf_minus_goal': {
             'description': 'xGF minus Goals For',
             'type': 'total',
@@ -610,4 +617,10 @@ class XGLayer:
         all_metrics = xg.get_all_metrics()
         for key, metric in all_metrics.items():
             if isinstance(metric, Metric) and key in team_aggregates[team_id]:
-                team_aggregates[team_id][key].value += metric.value
+                agg_metric = team_aggregates[team_id][key]
+                agg_metric.value += metric.value
+
+                # Append metric value to trend history
+                if agg_metric.value_trend is None:
+                    agg_metric.value_trend = []
+                agg_metric.value_trend.append(metric.value)

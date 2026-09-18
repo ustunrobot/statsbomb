@@ -159,7 +159,7 @@ class DataProvider:
                 print(f"[DataProvider] Checking season folder: {season_folder}")
 
                 # Collect valid match files
-                for event_file in season_folder.glob("Week1*.json"):
+                for event_file in season_folder.glob("Week*.json"):
                     # Skip 360frames files
                     if event_file.name.endswith("_360frames.json"):
                         continue

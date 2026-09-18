@@ -10,19 +10,6 @@ from football_analytics.event_based.metrics import Metric
 
 section_data = {}
 
-section_data['Team'] = "Port Vale FC"
-section_data['Metrics'] = {
-    'xgf': Metric(value=12.5, value_pg=2.5, percentile=65.0, percentile_order=10, percentile_total=24, sample_size=5, average=2.5, z_score=0.5),
-    'xga': Metric(value=8.3, value_pg=1.66, percentile=45.0, percentile_order=13, percentile_total=24, sample_size=5, average=1.66, z_score=-0.4),
-    'shots': Metric(value=48, value_pg=9.6, percentile=72.0, percentile_order=8, percentile_total=24, sample_size=5, average=9.6, z_score=0.2),
-    'goals': Metric(value=8, value_pg=1.6, percentile=58.0, percentile_order=11, percentile_total=24, sample_size=5, average=1.6, z_score=1.5),
-    'op_shots': Metric(value=35, value_pg=7.0, percentile=55.0, percentile_order=12, percentile_total=24, sample_size=5, average=7.0, z_score=0.7),
-    'op_xga': Metric(value=10.2, value_pg=2.04, percentile=38.0, percentile_order=15, percentile_total=24, sample_size=5, average=2.04, z_score=-0.9),
-    'possession': Metric(value=285, value_pg=57.0, percentile=62.0, percentile_order=9, percentile_total=24, sample_size=5, average=57.0, z_score=0.6),
-    'pass_completion': Metric(value=420, value_pg=84.0, percentile=70.0, percentile_order=7, percentile_total=24, sample_size=5, average=84.0, z_score=1.2),
-}
-
-
 def render_metrics_section(section_data: dict) -> str:
     """Render the team metrics overview section with card layout."""
     metrics = section_data.get('Metrics', {})

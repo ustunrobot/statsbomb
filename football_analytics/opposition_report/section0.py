@@ -57,7 +57,7 @@ def render_derived_metrics_cards(metrics_dict: dict) -> str:
 
         # Format label and percentile separately for alignment
         label_text = metric.label if metric.label else ""
-        percentile_text = f"P: ({metric.percentile:.0f}%)"
+        percentile_text = f"P: ({metric.percentile_order}/{metric.percentile_total})" 
 
         cards_html += f"""
             <div class="{card_class}">
@@ -129,7 +129,6 @@ def get_styles() -> str:
       padding: 40px 48px;
       background: white;
       border-top: 1px solid #e5e5e5;
-      page-break-after: always;
     }
 
     .s0-section-container {

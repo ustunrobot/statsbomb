@@ -52,6 +52,11 @@ def get_styles() -> str:
       align-items: start;
     }
 
+    .cover.player {
+      min-height: 80px;
+      padding: 20px 24px 18px 21px;
+    }
+
     .cover-stripe {
       background: var(--accent);
     }
@@ -69,6 +74,10 @@ def get_styles() -> str:
       margin-bottom: 10px;
     }
 
+    .cover.player .cover-eyebrow {
+      margin-bottom: 5px;
+    }
+
     .cover-title {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 28px;
@@ -76,6 +85,10 @@ def get_styles() -> str:
       line-height: 1.1;
       margin-bottom: 8px;
       color: #6fa0e8;
+    }
+
+    .cover.player .cover-title {
+      margin-bottom: 4px;
     }
 
     .cover-title span {
@@ -89,13 +102,24 @@ def get_styles() -> str:
       margin-top: 6px;
     }
 
+    .cover.player .cover-subtitle {
+      margin-top: 3px;
+    }
+
     .cover-meta {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 13px;
       color: rgba(255,255,255,.55);
       margin-top: 16px;
+      margin-bottom: 16px;
       display: flex;
       gap: 24px;
+    }
+
+    .cover.player .cover-meta {
+      margin-top: 8px;
+      margin-bottom: 8px;
+      gap: 12px;
     }
 
     .cover-meta b {
@@ -117,17 +141,23 @@ def get_styles() -> str:
     """
 
 
-def render_report_title_section(all_metrics: dict) -> str:
+def render_report_title_section(all_metrics: dict, report_type: str = "team", player_name: str = None, sample_size: int = None) -> str:
     """Render the report title section using cover styling."""
+    cover_class = "cover"
+    if report_type == "player":
+        cover_class = "cover player"
+
+    title = player_name if report_type == "player" else all_metrics.get('team_name')
+
     html = f"""
-    <section class="cover">
+    <section class="{cover_class}">
         <div class="cover-stripe"></div>
         <div class="cover-content">
             <div class="cover-eyebrow">
-                {"Opponent Intelligence Report"}
+                {"Player Intelligence Report" if report_type == "player" else "Opponent Intelligence Report"}
             </div>
             <h1 class="cover-title">
-                {all_metrics.get('team_name')}
+                {title}
             </h1>
             <div class="cover-subtitle">
                 {all_metrics.get('league')} - {all_metrics.get('season')} - StatsBomb Data
@@ -135,6 +165,7 @@ def render_report_title_section(all_metrics: dict) -> str:
             <div class="cover-meta">
                 <span><b>{all_metrics.get('matches')}</b> Matches Analyzed</span>
                 <span><b>{all_metrics.get('total_teams')}</b> Teams in League</span>
+                {f'<span><b>{sample_size}</b> Players Compared</span>' if sample_size is not None else ''}
             </div>
         </div>
     </section>

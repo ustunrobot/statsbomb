@@ -353,6 +353,7 @@ def get_styles() -> str:
 
     .s21-summary-metrics {
       margin-top: 24px;
+      margin-bottom: 24px;
       padding-top: 16px;
       border-top: 1px solid #e5e5e5;
       display: flex;

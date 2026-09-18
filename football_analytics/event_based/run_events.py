@@ -64,13 +64,18 @@ if __name__ == "__main__":
 
     results_by_match = []
     for filename, events_dict in matches:        
-        results = processor.process_event_file(events_dict, filename)
+        results = processor.process_event_file(events_dict)
         results_by_match.append((filename, results))
 
     # Aggregate stats per team across all matches (delegated to KPI layers)
     aggregates_by_layer = processor.aggregate_results(results_by_match)
 
-
+    for layer_name, team_aggregates in aggregates_by_layer.items():
+        print(layer_name)
+        print(team_aggregates.keys())
+        if layer_name == 'possession':
+            print(team_aggregates.get(76))
+            
     
     sys.exit(1)
 

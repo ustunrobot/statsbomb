@@ -9,52 +9,35 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from football_analytics.event_based.metrics import Metric
 
-section_data = {}
-
-section_data['Team'] = "Port Vale FC"
-
-# Organize metrics by shot type categories
-section_data['Metrics'] = {
-    # Direct shots
-    'direct_corner': Metric(value=2.3, value_pg=0.46, percentile=58.0, percentile_order=10, percentile_total=24, sample_size=5, average=0.46, z_score=0.4),
-    'direct_free_kick': Metric(value=1.8, value_pg=0.36, percentile=52.0, percentile_order=12, percentile_total=24, sample_size=5, average=0.36, z_score=0.1),
-    'direct_kick_off': Metric(value=0.5, value_pg=0.1, percentile=35.0, percentile_order=16, percentile_total=24, sample_size=5, average=0.1, z_score=-0.9),
-    'penalty': Metric(value=1.2, value_pg=0.24, percentile=48.0, percentile_order=13, percentile_total=24, sample_size=5, average=0.24, z_score=-0.2),
-
-    # Set piece shots
-    'set_piece_corner': Metric(value=3.5, value_pg=0.7, percentile=65.0, percentile_order=9, percentile_total=24, sample_size=5, average=0.7, z_score=0.6),
-    'set_piece_throw_in': Metric(value=0.8, value_pg=0.16, percentile=42.0, percentile_order=14, percentile_total=24, sample_size=5, average=0.16, z_score=-0.6),
-    'set_piece_free_kick': Metric(value=2.1, value_pg=0.42, percentile=55.0, percentile_order=11, percentile_total=24, sample_size=5, average=0.42, z_score=0.2),
-
-    # Open play
-    'open_play': Metric(value=5.8, value_pg=1.16, percentile=68.0, percentile_order=8, percentile_total=24, sample_size=5, average=1.16, z_score=0.7),
-}
-
-# Additional metrics
-section_data['Additional_Metrics'] = {
-    'header': Metric(value=28, value_pg=5.6, percentile=72.0, percentile_order=7, percentile_total=24, sample_size=5, average=5.6, z_score=0.8),
-    'outbox': Metric(value=12.5, value_pg=2.5, percentile=55.0, percentile_order=11, percentile_total=24, sample_size=5, average=2.5, z_score=0.2),
-    'one_on_one': Metric(value=7.2, value_pg=1.44, percentile=61.0, percentile_order=10, percentile_total=24, sample_size=5, average=1.44, z_score=0.5),
-}
-
-# Derived metrics
-section_data['Derived_Metrics'] = {
-    'shot_volume': Metric(value=48, value_pg=9.6, percentile=68.0, percentile_order=8, percentile_total=24, sample_size=5, average=9.6, z_score=0.6),
-    'shot_quality': Metric(value=0.26, value_pg=0.052, percentile=62.0, percentile_order=9, percentile_total=24, sample_size=5, average=0.052, z_score=0.4),
-    'finishing': Metric(value=0.95, value_pg=0.19, percentile=58.0, percentile_order=10, percentile_total=24, sample_size=5, average=0.19, z_score=0.3),
-}
-
-
-def create_pie_chart(section_data: dict) -> str:
+def create_pie_chart(team_metrics: dict) -> str:
     """Create an SVG pie chart showing shot type distribution."""
-    metrics = section_data.get('Metrics', {})
 
-    # Calculate totals by category
-    direct_total = metrics['direct_corner'].value + metrics['direct_free_kick'].value + metrics['direct_kick_off'].value + metrics['penalty'].value
-    set_piece_total = metrics['set_piece_corner'].value + metrics['set_piece_throw_in'].value + metrics['set_piece_free_kick'].value
-    open_play_total = metrics['open_play'].value
+    # Safely extract xG values with fallback to 0 if metric doesn't exist
+    def get_metric_value(key, default=0):
+        metric = team_metrics.get(key)
+        if metric:
+            if metric.value_pg:
+                return metric.value_pg
+            else:
+                return metric.value
+        else:
+            return default
+        
+
+    direct_total = (
+        get_metric_value('xg_for_direct_corner') +
+        get_metric_value('xg_for_direct_free_kick') +
+        get_metric_value('xg_for_direct_kick_off') +
+        get_metric_value('xg_for_penalty')
+    )
+    set_piece_total = get_metric_value('xg_for_set_piece_total')
+    open_play_total = get_metric_value('xg_for_open_play')
 
     grand_total = direct_total + set_piece_total + open_play_total
+
+    # Return fallback content if no data available
+    if grand_total == 0:
+        return '<p style="color: #999; font-style: italic;">No shot data available.</p>'
 
     # Color palettes
     direct_colors = ['#17a2b8', '#117a8b', '#0c5460']  # Teal shades
@@ -87,7 +70,7 @@ def create_pie_chart(section_data: dict) -> str:
 
     # Build SVG
     svg = f"""
-    <svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="pie-chart">
+    <svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="s4-pie-chart">
         <!-- Background with border -->
         <rect width="{size}" height="{size}" fill="white" stroke="#d9d9d9" stroke-width="1"/>
 
@@ -163,16 +146,16 @@ def render_metrics_cards(metrics_dict: dict, background_class: str = "", label_o
         # Get display name
         display_name = label_override.get(metric_name, metric_name.upper()) if label_override else metric_name.upper()
 
-        card_class = f"metric-card {background_class}" if background_class else "metric-card"
+        card_class = f"s4-metric-card {background_class}" if background_class else "s4-metric-card"
         cards_html += f"""
             <div class="{card_class}">
-                <div class="metric-card-name">{display_name}</div>
-                <div class="metric-card-value">{metric.value:.2f}</div>
-                <div class="metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
-                <div class="metric-card-bar">
-                    <div class="metric-card-bar-background">
-                        <div class="metric-card-bar-center"></div>
-                        <div class="metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
+                <div class="s4-metric-card-name">{display_name}</div>
+                <div class="s4-metric-card-value">{metric.value:.2f}</div>
+                <div class="s4-metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
+                <div class="s4-metric-card-bar">
+                    <div class="s4-metric-card-bar-background">
+                        <div class="s4-metric-card-bar-center"></div>
+                        <div class="s4-metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
                     </div>
                 </div>
             </div>
@@ -193,9 +176,9 @@ def render_derived_metrics_cards(metrics_dict: dict, label_override: dict = None
         label_override: Dictionary to override metric names for display
     """
     color_mapping = {
-        'shot_volume': 'metric-card-light-teal',
-        'shot_quality': 'metric-card-light-brick',
-        'finishing': 'metric-card-light-gray-custom'
+        'shot_volume': 's4-metric-card-light-teal',
+        'shot_quality': 's4-metric-card-light-brick',
+        'finishing': 's4-metric-card-light-gray-custom'
     }
 
     cards_html = ""
@@ -216,18 +199,18 @@ def render_derived_metrics_cards(metrics_dict: dict, label_override: dict = None
             bar_color = "#666666"
 
         display_name = label_override.get(metric_name, metric_name.upper()) if label_override else metric_name.upper()
-        background_class = color_mapping.get(metric_name, "metric-card")
-        card_class = f"metric-card {background_class}"
+        background_class = color_mapping.get(metric_name, "s4-metric-card")
+        card_class = f"s4-metric-card {background_class}"
 
         cards_html += f"""
             <div class="{card_class}">
-                <div class="metric-card-name">{display_name}</div>
-                <div class="metric-card-value">{metric.value:.2f}</div>
-                <div class="metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
-                <div class="metric-card-bar">
-                    <div class="metric-card-bar-background">
-                        <div class="metric-card-bar-center"></div>
-                        <div class="metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
+                <div class="s4-metric-card-name">{display_name}</div>
+                <div class="s4-metric-card-value">{metric.value:.2f}</div>
+                <div class="s4-metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
+                <div class="s4-metric-card-bar">
+                    <div class="s4-metric-card-bar-background">
+                        <div class="s4-metric-card-bar-center"></div>
+                        <div class="s4-metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
                     </div>
                 </div>
             </div>
@@ -235,103 +218,97 @@ def render_derived_metrics_cards(metrics_dict: dict, label_override: dict = None
     return cards_html
 
 
-def render_shot_type_section(section_data: dict) -> str:
+def render_shot_type_section(team_metrics: dict) -> str:
     """Render section 4 with pie chart and details side-by-side."""
-    pie_svg = create_pie_chart(section_data)
-    metrics = section_data.get('Metrics', {})
+    pie_svg = create_pie_chart(team_metrics)
 
     # Build right square content with details
     details_html = """
-        <div class="shot-type-details-box">
-            <div class="details-section">
-                <div class="details-header">Direct Shots</div>
-                <div class="details-items">
+        <div class="s4-shot-type-details-box">
+            <div class="s4-details-section">
+                <div class="s4-details-header">Direct Shots xG</div>
+                <div class="s4-details-items">
     """
-    for metric_name in ['direct_corner', 'direct_free_kick', 'direct_kick_off', 'penalty']:
-        metric = metrics[metric_name]
-        label_short = metric_name.replace('_', ' ').replace('direct ', 'D.').title()
-        details_html += f"""
-                    <div class="detail-item">
-                        <div class="detail-item-label">{label_short}</div>
-                        <div class="detail-item-value"><span class="detail-item-percentile">{metric.percentile:.0f}%</span>{metric.value:.1f}</div>
+    for metric_name in ['xg_for_direct_free_kick',  'xg_for_penalty']:
+        metric = team_metrics.get(metric_name)
+        if metric:
+            label_short = metric_name.replace('xg_for_', '').replace('direct_', 'D.').replace('_', ' ').title()
+            details_html += f"""
+                    <div class="s4-detail-item">
+                        <div class="s4-detail-item-label">{label_short}</div>
+                        <div class="s4-detail-item-value"><span class="s4-detail-item-percentile">P:({metric.percentile_order}/{metric.percentile_total})</span>{metric.value:.1f}</div>
                     </div>
         """
     details_html += """
                 </div>
             </div>
 
-            <div class="details-section">
-                <div class="details-header">Set Pieces</div>
-                <div class="details-items">
+            <div class="s4-details-section">
+                <div class="s4-details-header">Set Pieces xG</div>
+                <div class="s4-details-items">
     """
-    for metric_name in ['set_piece_corner', 'set_piece_throw_in', 'set_piece_free_kick']:
-        metric = metrics[metric_name]
-        label_short = metric_name.replace('set_piece_', 'SP ').replace('_', ' ').title()
-        details_html += f"""
-                    <div class="detail-item">
-                        <div class="detail-item-label">{label_short}</div>
-                        <div class="detail-item-value"><span class="detail-item-percentile">{metric.percentile:.0f}%</span>{metric.value:.1f}</div>
+    for metric_name in ['xg_for_set_piece_corner', 'xg_for_set_piece_throw_in', 'xg_for_set_piece_free_kick']:
+        metric = team_metrics.get(metric_name)
+        if metric:
+            label_short = metric_name.replace('xg_for_set_piece_', 'SP ').replace('_', ' ').title()
+            details_html += f"""
+                    <div class="s4-detail-item">
+                        <div class="s4-detail-item-label">{label_short}</div>
+                        <div class="s4-detail-item-value"><span class="s4-detail-item-percentile">P:({metric.percentile_order}/{metric.percentile_total})</span>{metric.value:.1f}</div>
                     </div>
         """
     details_html += """
                 </div>
             </div>
 
-            <div class="details-section">
-                <div class="details-header">Open Play</div>
-                <div class="details-items">
+            <div class="s4-details-section">
+                <div class="s4-details-header">Open Play xG</div>
+                <div class="s4-details-items">
     """
-    metric = metrics['open_play']
-    details_html += f"""
-                    <div class="detail-item">
-                        <div class="detail-item-label">OP</div>
-                        <div class="detail-item-value"><span class="detail-item-percentile">{metric.percentile:.0f}%</span>{metric.value:.1f}</div>
+    metric = team_metrics.get('xg_for_open_play')
+    if metric:
+        details_html += f"""
+                    <div class="s4-detail-item">
+                        <div class="s4-detail-item-label">OP</div>
+                        <div class="s4-detail-item-value"><span class="s4-detail-item-percentile">P:({metric.percentile_order}/{metric.percentile_total})</span>{metric.value:.1f}</div>
                     </div>
                 </div>
             </div>
         </div>
     """
 
-    # Render additional metrics
-    additional_metrics_html = render_additional_metrics(section_data.get('Additional_Metrics', {}))
+    # Extract team name
+    team_name = team_metrics.get('team_name', 'Team')
+
+    # Filter team_metrics for additional metrics
+    additional_metric_keys = ['team_season_headers', 'team_season_shots_box_outside', 'team_season_one_on_one']
+    additional_metrics = {key: team_metrics.get(key) for key in additional_metric_keys if team_metrics.get(key)}
+    additional_metrics_html = render_additional_metrics(additional_metrics)
 
     # Render derived metrics with custom colors per metric
     derived_label_override = {
-        'shot_volume': 'Shot Volume',
-        'shot_quality': 'Shot Quality',
-        'finishing': 'Finishing'
+        'xgf_per_shot': 'xGF per Shot',
+        'goal_per_xgf': 'Goals per xGF'
     }
+    derived_metric_keys = ['xgf_per_shot', 'goal_per_xgf']
+    derived_metrics = {key: team_metrics.get(key) for key in derived_metric_keys if team_metrics.get(key)}
     derived_metrics_html = render_derived_metrics_cards(
-        section_data.get('Derived_Metrics', {}),
+        derived_metrics,
         label_override=derived_label_override
     )
 
     html = f"""
-    <section class="shot-type-section">
-        <div class="section-container">
-            <h2 class="section-title">Attacking Breakdown</h2>
-            <p class="section-subtitle">xGF breakdown by shot type for {section_data.get('Team', 'Team')}</p>
+    <section class="s4-shot-type-section">
+        <div class="s4-section-container">
+            <h2 class="s4-additional-metrics-title">Attacking XG Breakdown</h2>
+            <p class="s4-section-subtitle">xGF breakdown by shot type for {team_name}</p>
 
-            <div class="shot-type-container">
-                <div class="chart-wrapper">
+            <div class="s4-shot-type-container">
+                <div class="s4-chart-wrapper">
                     {pie_svg}
                 </div>
                 {details_html}
-            </div>
-
-            <div class="additional-metrics-section">
-                <h3 class="additional-metrics-title">Additional xGF Metrics</h3>
-                <div class="additional-metrics-grid">
-                    {additional_metrics_html}
-                </div>
-            </div>
-
-            <div class="additional-metrics-section">
-                <h3 class="additional-metrics-title">Derived Metrics</h3>
-                <div class="additional-metrics-grid">
-                    {derived_metrics_html}
-                </div>
-            </div>
+            </div>                
         </div>
     </section>
     """
@@ -342,18 +319,17 @@ def get_styles() -> str:
     """Return CSS styles for section 4."""
     return """
     <style>
-    .shot-type-section {
+    .s4-shot-type-section {
       padding: 40px 48px;
       background: white;
       border-top: 1px solid #e5e5e5;
-      page-break-after: always;
     }
 
-    .section-container {
+    .s4-section-container {
       max-width: 1000px;
     }
 
-    .section-title {
+    .s4-section-title {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 24px;
       font-weight: 700;
@@ -361,32 +337,32 @@ def get_styles() -> str:
       margin-bottom: 4px;
     }
 
-    .section-subtitle {
+    .s4-section-subtitle {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 13px;
       color: #999;
       margin-bottom: 24px;
     }
 
-    .shot-type-container {
+    .s4-shot-type-container {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 24px;
       align-items: start;
     }
 
-    .chart-wrapper {
+    .s4-chart-wrapper {
       display: flex;
       justify-content: center;
       align-items: center;
     }
 
-    .pie-chart {
+    .s4-pie-chart {
       max-width: 100%;
       height: auto;
     }
 
-    .shot-type-details-box {
+    .s4-shot-type-details-box {
       background: white;
       padding: 0;
       display: flex;
@@ -396,14 +372,14 @@ def get_styles() -> str:
       overflow-y: auto;
     }
 
-    .details-section {
+    .s4-details-section {
       display: flex;
       flex-direction: column;
       gap: 4px;
       flex: 1;
     }
 
-    .details-header {
+    .s4-details-header {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 12px;
       font-weight: 600;
@@ -414,13 +390,13 @@ def get_styles() -> str:
       padding-top: 4px;
     }
 
-    .details-items {
+    .s4-details-items {
       display: flex;
       flex-direction: column;
       gap: 3px;
     }
 
-    .detail-item {
+    .s4-detail-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -428,7 +404,7 @@ def get_styles() -> str:
       padding: 3px 0;
     }
 
-    .detail-item-label {
+    .s4-detail-item-label {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 10px;
       color: #666;
@@ -438,7 +414,7 @@ def get_styles() -> str:
       flex: 1;
     }
 
-    .detail-item-value {
+    .s4-detail-item-value {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 12px;
       font-weight: 600;
@@ -447,7 +423,7 @@ def get_styles() -> str:
       white-space: nowrap;
     }
 
-    .detail-item-percentile {
+    .s4-detail-item-percentile {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 10px;
       font-weight: 500;
@@ -456,13 +432,13 @@ def get_styles() -> str:
       margin-right: 2px;
     }
 
-    .additional-metrics-section {
+    .s4-additional-metrics-section {
       margin-top: 24px;
       padding-top: 16px;
       border-top: 1px solid #e5e5e5;
     }
 
-    .additional-metrics-title {
+    .s4-additional-metrics-title {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 14px;
       font-weight: 600;
@@ -472,39 +448,39 @@ def get_styles() -> str:
       letter-spacing: 0.08em;
     }
 
-    .additional-metrics-grid {
+    .s4-additional-metrics-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 16px;
     }
 
-    .metric-card {
+    .s4-metric-card {
       border: 1px solid #d9d9d9;
       border-radius: 6px;
       padding: 12px;
       background: white;
     }
 
-    .metric-card.metric-card-light-gray {
+    .s4-metric-card.metric-card-light-gray {
       background: #e8fbfd;
     }
 
-    .metric-card.metric-card-light-teal {
+    .s4-metric-card.metric-card-light-teal {
       background: #ecfbfd;
       border: none;
     }
 
-    .metric-card.metric-card-light-brick {
+    .s4-metric-card.metric-card-light-brick {
       background: #fdf2ed;
       border: none;
     }
 
-    .metric-card.metric-card-light-gray-custom {
+    .s4-metric-card.metric-card-light-gray-custom {
       background: #f5f7fa;
       border: none;
     }
 
-    .metric-card-name {
+    .s4-metric-card-name {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 9px;
       color: #999;
@@ -514,7 +490,7 @@ def get_styles() -> str:
       letter-spacing: 0.05em;
     }
 
-    .metric-card-value {
+    .s4-metric-card-value {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 16px;
       font-weight: 700;
@@ -522,21 +498,21 @@ def get_styles() -> str:
       margin-bottom: 6px;
     }
 
-    .metric-card-zscore {
+    .s4-metric-card-zscore {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 10px;
       color: #999;
       margin-bottom: 8px;
     }
 
-    .metric-card-bar {
+    .s4-metric-card-bar {
       height: 18px;
       display: flex;
       align-items: center;
       position: relative;
     }
 
-    .metric-card-bar-background {
+    .s4-metric-card-bar-background {
       width: 100%;
       height: 5px;
       background: #e5e5e5;
@@ -544,7 +520,7 @@ def get_styles() -> str:
       position: relative;
     }
 
-    .metric-card-bar-center {
+    .s4-metric-card-bar-center {
       position: absolute;
       left: 50%;
       top: -3px;
@@ -554,7 +530,7 @@ def get_styles() -> str:
       transform: translateX(-50%);
     }
 
-    .metric-card-bar-fill {
+    .s4-metric-card-bar-fill {
       position: absolute;
       top: 0;
       height: 5px;
@@ -565,7 +541,3 @@ def get_styles() -> str:
     """
 
 
-if __name__ == "__main__":
-    # Test the function
-    html_output = render_shot_type_section(section_data)
-    print(html_output)

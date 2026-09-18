@@ -10,6 +10,9 @@ Responsibilities:
 from typing import Dict, Callable, List
 from .kpi.xg_layer import XGLayer
 from .kpi.xg_findings import XGFindingsLayer
+from .kpi.possession_layer import PossessionLayer
+from .kpi.passing_layer import PassingLayer
+from .kpi.defending_layer import DefendingLayer
 
 
 class KPIAccumulator:
@@ -64,6 +67,9 @@ class EventProcessor:
     def _register_default_layers(self):
         """Register default KPI layers."""
         self.register_layer(XGLayer())
+        self.register_layer(PossessionLayer())
+        self.register_layer(PassingLayer())
+        self.register_layer(DefendingLayer())
 
     def register_layer(self, layer):
         """
@@ -75,8 +81,7 @@ class EventProcessor:
 
     def process_event_file(
         self,
-        events_dict: Dict,
-        filename: str = "unknown",
+        events_dict: Dict,        
     ) -> Dict:
         """
         Process all events in a match file through KPI layers.
@@ -186,12 +191,6 @@ class EventProcessor:
         self._finalize_aggregates(aggregates_by_layer)
         return aggregates_by_layer
 
-        # Evaluate findings for each team
-        findings_layer = XGFindingsLayer()
-        aggregates_by_layer['xg_findings'] = self._evaluate_findings(findings_layer, aggregates_by_layer['xg'])
-
-        return aggregates_by_layer
-
     def _finalize_aggregates(self, aggregates_by_layer: Dict) -> None:
         """
         Calculate derived metrics and percentiles after aggregation.
@@ -200,25 +199,49 @@ class EventProcessor:
             aggregates_by_layer: Dictionary of aggregates to finalize in-place
         """
         from .metrics import Metric
-        from .kpi.xg_layer import DERIVED_METRICS
+        from .kpi.xg_layer import DERIVED_METRICS as XG_DERIVED_METRICS
+        from .kpi.possession_layer import DERIVED_METRICS as POSSESSION_DERIVED_METRICS
 
         for layer_name, team_aggregates in aggregates_by_layer.items():
             if not team_aggregates:
                 continue
 
-            # Calculate derived metrics for xg layer
+            # Get the appropriate derived metrics for this layer
+            derived_metrics_dict = {}
+
+            # Find the corresponding layer instance for finalization
+            layer_instance = None
+            for layer in self.kpi_layers:
+                if layer.layer_name == layer_name:
+                    layer_instance = layer
+                    break
+
             if layer_name == 'xg':
-                self._calculate_derived_metrics(team_aggregates, DERIVED_METRICS)
+                derived_metrics_dict = XG_DERIVED_METRICS
+                self._calculate_derived_metrics(team_aggregates, derived_metrics_dict)
+            elif layer_name == 'possession':
+                derived_metrics_dict = POSSESSION_DERIVED_METRICS
+                self._calculate_derived_metrics(team_aggregates, derived_metrics_dict)
+            elif layer_name == 'passing':
+                # For passing layer, finalize each team's player data
+                if layer_instance:
+                    for team_id, team_data in team_aggregates.items():
+                        layer_instance.finalize_team_aggregate(team_data)
+                continue  # Skip percentile calculation for passing layer
+            elif layer_name == 'defending':
+                # For defending layer, finalize defensive metrics
+                if layer_instance:
+                    for team_id, team_data in team_aggregates.items():
+                        layer_instance.finalize_team_aggregate(team_data)
 
             # Get all metric field names (skip 'team_name' and 'matches')
             sample_team = next(iter(team_aggregates.values()))
             metric_fields = [k for k in sample_team.keys()
-                           if k not in ('team_name', 'matches') and isinstance(sample_team[k], Metric)]
+                           if k not in ('team_name', 'matches', 'players', 'defending_data', 'player_metadata', 'passing_matrix_data') and isinstance(sample_team[k], Metric)]
 
             # For each metric field, calculate derived values and percentiles
-            derived_metrics = DERIVED_METRICS if layer_name == 'xg' else {}
             for field_name in metric_fields:
-                self._calculate_metric_percentiles(team_aggregates, field_name, derived_metrics)
+                self._calculate_metric_percentiles(team_aggregates, field_name, derived_metrics_dict)
 
     def _calculate_derived_metrics(self, team_aggregates: Dict, derived_metrics: Dict) -> None:
         """

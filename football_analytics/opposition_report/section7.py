@@ -10,15 +10,6 @@ from football_analytics.event_based.metrics import Metric
 
 section_data = {}
 
-section_data['Team'] = "Port Vale FC"
-section_data['Metrics'] = {
-    'pass_completion': Metric(value=84.2, value_pg=16.84, percentile=70.0, percentile_order=7, percentile_total=24, sample_size=5, average=16.84, z_score=1.2),
-    'progressive_passes': Metric(value=42, value_pg=8.4, percentile=68.0, percentile_order=8, percentile_total=24, sample_size=5, average=8.4, z_score=0.8),
-    'key_passes': Metric(value=18, value_pg=3.6, percentile=62.0, percentile_order=9, percentile_total=24, sample_size=5, average=3.6, z_score=0.5),
-    'long_balls': Metric(value=28, value_pg=5.6, percentile=55.0, percentile_order=11, percentile_total=24, sample_size=5, average=5.6, z_score=0.2),
-    'cross_completion': Metric(value=32.5, value_pg=6.5, percentile=48.0, percentile_order=13, percentile_total=24, sample_size=5, average=6.5, z_score=-0.1),
-}
-
 # Passing network data: Player positions and pass connections
 section_data['Players'] = [
     {'name': 'GK', 'number': 1, 'position': (10, 40), 'touches': 12},
@@ -83,31 +74,31 @@ def render_passing_section(section_data: dict) -> str:
         label = metric_name.replace('_', ' ').title()
 
         cards_html += f"""
-            <div class="metric-card">
-                <div class="metric-card-name">{label}</div>
-                <div class="metric-card-value">{metric.value:.2f}</div>
-                <div class="metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
-                <div class="metric-card-bar">
-                    <div class="metric-card-bar-background">
-                        <div class="metric-card-bar-center"></div>
-                        <div class="metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
+            <div class="s7-metric-card">
+                <div class="s7-metric-card-name">{label}</div>
+                <div class="s7-metric-card-value">{metric.value:.2f}</div>
+                <div class="s7-metric-card-zscore">{z_score:.2f} ({metric.percentile:.0f}%)</div>
+                <div class="s7-metric-card-bar">
+                    <div class="s7-metric-card-bar-background">
+                        <div class="s7-metric-card-bar-center"></div>
+                        <div class="s7-metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
                     </div>
                 </div>
             </div>
         """
 
     html = f"""
-    <section class="passing-section">
-        <div class="section-container">
-            <h2 class="section-title">Passing</h2>
-            <p class="section-subtitle">Passing metrics for {section_data.get('Team', 'Team')}</p>
+    <section class="s7-passing-section">
+        <div class="s7-section-container">
+            <h2 class="s7-section-title">Passing</h2>
+            <p class="s7-section-subtitle">Passing metrics for {section_data.get('Team', 'Team')}</p>
 
-            <div class="passing-metrics-grid">
+            <div class="s7-passing-metrics-grid">
                 {cards_html}
             </div>
 
-            <h3 class="subsection-title">Passing Network</h3>
-            <p class="section-subtitle">Player positions and pass connections</p>
+            <h3 class="s7-subsection-title">Passing Network</h3>
+            <p class="s7-section-subtitle">Player positions and pass connections</p>
 
             {create_passing_network_pitch(section_data)}
         </div>
@@ -163,7 +154,7 @@ def create_passing_network_pitch(section_data: dict) -> str:
 
     # Draw pitch background
     svg = f"""
-    <svg width="{total_width}" height="{total_height}" viewBox="0 0 {total_width} {total_height}" xmlns="http://www.w3.org/2000/svg" class="passing-network-svg">
+    <svg width="{total_width}" height="{total_height}" viewBox="0 0 {total_width} {total_height}" xmlns="http://www.w3.org/2000/svg" class="s7-passing-network-svg">
         <!-- Pitch background -->
         <rect x="{padding}" y="{padding}" width="{pitch_width}" height="{pitch_height}" fill="#2d5a2d" stroke="#fff" stroke-width="2"/>
 
@@ -238,18 +229,18 @@ def get_styles() -> str:
     """Return CSS styles for section 7."""
     return """
     <style>
-    .passing-section {
+    .s7-passing-section {
       padding: 40px 48px;
       background: white;
       border-top: 1px solid #e5e5e5;
       page-break-after: always;
     }
 
-    .section-container {
+    .s7-section-container {
       max-width: 1000px;
     }
 
-    .section-title {
+    .s7-section-title {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 24px;
       font-weight: 700;
@@ -257,27 +248,27 @@ def get_styles() -> str:
       margin-bottom: 4px;
     }
 
-    .section-subtitle {
+    .s7-section-subtitle {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 13px;
       color: #999;
       margin-bottom: 24px;
     }
 
-    .passing-metrics-grid {
+    .s7-passing-metrics-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       gap: 12px;
     }
 
-    .metric-card {
+    .s7-metric-card {
       border: 1px solid #d9d9d9;
       border-radius: 6px;
       padding: 11px;
       background: white;
     }
 
-    .metric-card-name {
+    .s7-metric-card-name {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 9px;
       color: #999;
@@ -287,7 +278,7 @@ def get_styles() -> str:
       letter-spacing: 0.05em;
     }
 
-    .metric-card-value {
+    .s7-metric-card-value {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 14px;
       font-weight: 700;
@@ -295,21 +286,21 @@ def get_styles() -> str:
       margin-bottom: 5px;
     }
 
-    .metric-card-zscore {
+    .s7-metric-card-zscore {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 9px;
       color: #999;
       margin-bottom: 8px;
     }
 
-    .metric-card-bar {
+    .s7-metric-card-bar {
       height: 17px;
       display: flex;
       align-items: center;
       position: relative;
     }
 
-    .metric-card-bar-background {
+    .s7-metric-card-bar-background {
       width: 100%;
       height: 5px;
       background: #e5e5e5;
@@ -317,7 +308,7 @@ def get_styles() -> str:
       position: relative;
     }
 
-    .metric-card-bar-center {
+    .s7-metric-card-bar-center {
       position: absolute;
       left: 50%;
       top: -3px;
@@ -327,7 +318,7 @@ def get_styles() -> str:
       transform: translateX(-50%);
     }
 
-    .metric-card-bar-fill {
+    .s7-metric-card-bar-fill {
       position: absolute;
       top: 0;
       height: 5px;
@@ -335,7 +326,7 @@ def get_styles() -> str:
       transition: all 0.3s ease;
     }
 
-    .subsection-title {
+    .s7-subsection-title {
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 16px;
       font-weight: 600;
@@ -344,7 +335,7 @@ def get_styles() -> str:
       margin-bottom: 4px;
     }
 
-    .passing-network-svg {
+    .s7-passing-network-svg {
       width: 100%;
       max-width: 680px;
       height: auto;

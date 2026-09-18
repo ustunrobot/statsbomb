@@ -200,6 +200,44 @@ def get_season_stats(competition_id: int, season_id: int, data_dir: str, team: s
     return filepath
 
 
+def get_season_matches(competition_id: int, season_id: int, data_dir: str, creds: dict | None = None):
+    """Fetch and save all matches for a season."""
+    from datetime import datetime
+
+    if creds is None:
+        creds = {}
+
+    # Fetch all matches for the season
+    matches = sb.matches(competition_id=competition_id, season_id=season_id, creds=creds)
+
+    # Filter out future matches - only include matches with date on or before today
+    today = pd.Timestamp(datetime.now().date())
+    total_before_filter = len(matches)
+    matches = matches[pd.to_datetime(matches['match_date']) <= today]
+    total_after_filter = len(matches)
+
+    if total_before_filter != total_after_filter:
+        excluded = total_before_filter - total_after_filter
+        print(f"Date filter applied: Excluded {excluded} future matches")
+
+    print(f"Found {total_after_filter} matches for competition {competition_id}, season {season_id}")
+
+    # Create data directory if it doesn't exist
+    data_path = Path(data_dir)
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    # Convert DataFrame to dict and save as JSON
+    matches_dict = matches.to_dict(orient='records')
+
+    filename = f"competition_{competition_id}_season_{season_id}_matches.json"
+    filepath = data_path / filename
+
+    # Save matches dict as JSON
+    with open(filepath, 'w') as f:
+        json.dump(matches_dict, f, indent=2)
+
+    print(f"✓ Saved {total_after_filter} matches to {filepath}")
+    return filepath
 
 
 def get_team_data(competition_id: int, season_id: int, team_name: str, creds: dict | None = None, data_dir: str = "data_temp", season_name: str | None = None):
@@ -335,6 +373,7 @@ def main():
     p.add_argument("--get-week-data", action="store_true", help="gets all match events in a week in a season")
     p.add_argument("--get-player-season-stats", action="store_true", help="requires competition and season id")
     p.add_argument("--get-season-stats", action="store_true", help="requires competition and season id team optional")
+    p.add_argument("--get-season-matches", action="store_true", help="fetch and save all matches for a season")
     p.add_argument("--week-no", type=int, help="Week no to fetch events for")
 
     # EFL League 2 Competition id = 5
@@ -390,7 +429,14 @@ def main():
         else:
             print("args needed --> competition and season ids")
         return
-    
+
+    if args.get_season_matches:
+        if args.competition_id and args.season_id:
+            get_season_matches(args.competition_id, args.season_id, data_dir="/home/baris/statsbomb/football_analytics/data", creds=creds)
+        else:
+            print("args needed --> competition and season ids")
+        return
+
     if args.get_team_data:
         if args.team_name and args.competition_id and args.season_id:
             get_team_data(args.competition_id, args.season_id, args.team_name, creds=creds)
