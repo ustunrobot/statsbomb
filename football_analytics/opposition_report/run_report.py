@@ -9,20 +9,25 @@ from pathlib import Path
 sys.stdout.flush()
 sys.stderr.flush()
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from football_analytics.opposition_report import section0, section1, section2, section3, section4, section5, section6, section7, section8, section9, section10, section11, section12, section13, section14, section15, section16, section21, section_appendix, section1_landscape
-from football_analytics.event_based.data_provider import DataProvider
-from football_analytics.event_based.event_processor import EventProcessor
+from opposition_report import section0, section1, section2, section3, section4, section5, section6, section7, section8, section9, section10, section11, section12, section13, section14, section15, section16, section17, section21, section_appendix, section1_landscape
+from event_based.data_provider import DataProvider
+from event_based.event_processor import EventProcessor
 
-def get_team_stats(competition_id: int, season_id: int) -> dict:
+def get_team_stats(competition_id: int, season_id: int, data_root: str = None) -> dict:
     """Process event data and return aggregates for the given team."""
-    provider = DataProvider()
+    provider = DataProvider(data_root=data_root)
     return provider.get_team_stats(competition_id, season_id)
 
-def get_aggregates_for_team(season: str) -> dict:
+def get_team_stats_sk(competition_id: int, season_id: int, data_root: str = None) -> dict:
     """Process event data and return aggregates for the given team."""
-    provider = DataProvider()
+    provider = DataProvider(data_root=data_root)
+    return provider.get_team_stats_sk(competition_id, season_id)
+
+def get_aggregates_for_team(season: str, data_root: str = None) -> dict:
+    """Process event data and return aggregates for the given team."""
+    provider = DataProvider(data_root=data_root)
     processor = EventProcessor()
 
     # Load and process matches
@@ -72,6 +77,7 @@ def get_all_styles() -> str:
     section14_styles = section14.get_styles().replace("<style>", "").replace("</style>", "")
     section15_styles = section15.get_styles().replace("<style>", "").replace("</style>", "")
     section16_styles = section16.get_styles().replace("<style>", "").replace("</style>", "")
+    section17_styles = section17.get_styles().replace("<style>", "").replace("</style>", "")
     section21_styles = section21.get_styles().replace("<style>", "").replace("</style>", "")
     appendix_styles = section_appendix.get_styles().replace("<style>", "").replace("</style>", "")
 
@@ -98,6 +104,7 @@ def get_all_styles() -> str:
 {section14_styles}
 {section15_styles}
 {section16_styles}
+{section17_styles}
 {section21_styles}
 {appendix_styles}
 
@@ -105,7 +112,7 @@ def get_all_styles() -> str:
     return styles
 
 
-def render_complete_report(all_metrics, team_metrics, statsbomb_team_metrics, team_name: str, all_player_stats: list = None, league_table: dict = None, report_type: str = "team") -> str:
+def render_complete_report(all_metrics, team_metrics, statsbomb_team_metrics, skillcorner_team_metrics, team_name: str, all_player_stats: list = None, all_player_stats_sk: list = None, league_table: dict = None, report_type: str = "team") -> str:
     """Render complete report combining all sections."""
     # Render each section
     if report_type == "team":
@@ -122,7 +129,8 @@ def render_complete_report(all_metrics, team_metrics, statsbomb_team_metrics, te
         section14_html = section14.render_radar_section(all_metrics, team_metrics, statsbomb_team_metrics, team_name, league_table)
         section15_html = section15.render_pressure_heatmap_section(team_metrics, team_name)
         section16_html = section16.render_performance_trends_section(team_metrics, team_name)
-        appendix_html = section_appendix.render_appendix_section()        
+        section17_html = section17.render_physical_data_section(skillcorner_team_metrics, team_name)
+        appendix_html = section_appendix.render_appendix_section()
         #section6_html = section6.render_pressing_heatmap_section(section6.section_data)
         #section7_html = section7.render_passing_section(all_metrics)
 
@@ -142,18 +150,36 @@ def render_complete_report(all_metrics, team_metrics, statsbomb_team_metrics, te
                 {section14_html}
                 {section15_html}
                 {section16_html}
+                {section17_html}
                 {appendix_html}
                 """
     if report_type == "player":
         player_sections = []
+
+        # Build a lookup of SkillCorner physical stats by StatsBomb player_id, since
+        # all_player_stats and all_player_stats_sk are independently filtered lists
+        # and may not be aligned index-for-index.
+        sk_stats_by_player_id = {}
+        if all_player_stats_sk:
+            for stats_sk in all_player_stats_sk:
+                pid = None
+                for source_key in ('player_all', 'player_h1', 'player_h2', 'player_otip', 'player_tip'):
+                    source = stats_sk.get(source_key)
+                    if source and source.get('player_id') is not None:
+                        pid = source.get('player_id')
+                        break
+                if pid is not None:
+                    sk_stats_by_player_id[pid] = stats_sk
+
         if all_player_stats:
             for player_stats in all_player_stats:
                 player_name_item = player_stats.get('player_name', 'Unknown Player')
                 sample_size_item = player_stats.get('sample_size')
                 player_position_item = player_stats.get('player_position')
                 minutes_threshold = player_stats.get('minutes_threshold')
+                player_stats_sk = sk_stats_by_player_id.get(player_stats.get('player_id'), {})
                 section1_html = section1_landscape.render_report_title_section_landscape(team_metrics, report_type, player_name_item, sample_size_item, player_position_item, minutes_threshold)
-                section21_html = section21.render_player_radar_section(player_stats)
+                section21_html = section21.render_player_radar_section(player_stats, player_stats_sk)
                 player_sections.append(section1_html)
                 player_sections.append(section21_html)
 
@@ -190,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument('season_id', help='Season ID (e.g., "12345")')
     parser.add_argument('report_type', choices=['player', 'team'], help='Report type: "player" or "team"')
     parser.add_argument('--player-id', type=int, default=None, help='Optional: Player ID to include in report')
+    parser.add_argument('--data-root', default=None, help='Directory containing downloaded team match-event folders (defaults to a path relative to this file, for local/dev runs)')
 
     args = parser.parse_args()
 
@@ -200,6 +227,7 @@ if __name__ == "__main__":
     season_id = args.season_id
     report_type = args.report_type
     player_id = args.player_id
+    data_root = args.data_root
 
     if player_id:
         print(f"Generating {report_type} opposition report for {team_name} in {season_id}: {season} ({competition_id}: {league}), Player ID: {player_id}...")
@@ -207,40 +235,20 @@ if __name__ == "__main__":
         print(f"Generating {report_type} opposition report for {team_name} in {season_id}: {season} ({competition_id}: {league})...")
 
     # Initialize data provider
-    provider = DataProvider()
+    provider = DataProvider(data_root=data_root)
     print(f"[PROGRESS]1|10|Loading league table...", flush=True)
 
     # Get and display league table
     league_table = provider.get_table(int(competition_id), int(season_id))
 
-    # if league_table:
-    #     print("\n" + "="*90)
-    #     print(f"LEAGUE TABLE - {league}")
-    #     print("="*90)
-    #     print(f"{'Rank':<6} {'Team':<25} {'P':<3} {'W':<3} {'D':<3} {'L':<3} {'GF':<3} {'GA':<3} {'GD':<4} {'Pts':<3}")
-    #     print("-"*90)
-    #     for tname, stats in sorted(league_table.items(), key=lambda x: x[1]['rank']):
-    #         rank = stats['rank']
-    #         played = stats['played']
-    #         wins = stats['wins']
-    #         draws = stats['draws']
-    #         losses = stats['losses']
-    #         gf = stats['goals_for']
-    #         ga = stats['goals_against']
-    #         gd = stats['goal_difference']
-    #         pts = stats['points']
-
-    #         # Highlight the team we're generating report for
-    #         marker = " ◄" if tname == team_name else ""
-    #         print(f"{rank:<6} {tname:<25} {played:<3} {wins:<3} {draws:<3} {losses:<3} {gf:<3} {ga:<3} {gd:<4} {pts:<3}{marker}")
-    #     print("="*90 + "\n")
-
     # Get aggregates from event data
     print(f"[PROGRESS]2|20|Loading match data...", flush=True)
-    all_metrics = get_aggregates_for_team(season)
+    all_metrics = get_aggregates_for_team(season, data_root=data_root)
     # Get stats for all teams (organized by team_name)
     print(f"[PROGRESS]3|96|Loading team statistics...", flush=True)
-    statsbomb_team_metrics = get_team_stats(competition_id, season_id)
+    statsbomb_team_metrics = get_team_stats(competition_id, season_id, data_root=data_root)
+    skillcorner_team_metrics = get_team_stats_sk(competition_id, season_id, data_root=data_root)
+
     # Get stats for all players
     #all_player_stats = provider.get_all_player_stats(competition_id, season_id)
     #print(f"✓ Loaded team metrics from StatsBomb data provider.")
@@ -277,10 +285,10 @@ if __name__ == "__main__":
     print(f"[PROGRESS]5|98|Rendering report sections...", flush=True)
 
     player_stats_list = []
-    player_name = None
+    player_stats_list_sk = []
+    #player_name = None
     if report_type == "player":
-        # Get player stats for the selected team
-        all_team_player_stats = statsbomb_team_metrics
+        # Get player stats for the selected team        
 
         if player_id:
             # Get stats for specific player
@@ -288,7 +296,10 @@ if __name__ == "__main__":
             player_stats = provider.get_player_stats(int(competition_id), int(season_id), player_id)
             if player_stats:
                 player_stats_list.append(player_stats)
-                player_name = player_stats.get('player_name')
+                #player_name = player_stats.get('player_name')
+            player_stats_sk = provider.get_player_stats_sk(int(competition_id), int(season_id), player_id)
+            if player_stats_sk:
+                player_stats_list_sk.append(player_stats_sk)
         else:
             # Get stats for all players of the team
             team_player_ids = provider.get_team_players(int(competition_id), int(season_id), team_name)
@@ -300,9 +311,14 @@ if __name__ == "__main__":
                     player_stats = provider.get_player_stats(int(competition_id), int(season_id), player_id_item)
                     if player_stats:
                         player_stats_list.append(player_stats)
+
+                    player_stats_sk = provider.get_player_stats_sk(int(competition_id), int(season_id), player_id_item)
+                    if player_stats_sk:
+                        player_stats_list_sk.append(player_stats_sk)
+
                     print(f"[PROGRESS]5|98|Retrieved stats for {idx}/{len(team_player_ids)} players...", flush=True)
 
-    html_output = render_complete_report(all_teams, team_metrics, statsbomb_team_metrics, team_name, player_stats_list, league_table, report_type)
+    html_output = render_complete_report(all_teams, team_metrics, statsbomb_team_metrics, skillcorner_team_metrics, team_name, player_stats_list, player_stats_list_sk, league_table, report_type)
 
     # Save HTML output to file
     print(f"[PROGRESS]6|99|Saving report...", flush=True)

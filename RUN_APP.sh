@@ -25,11 +25,9 @@ echo "Activating virtual environment..."
 source venv/bin/activate
 
 
-# Install ONLY essentials
+# Install dependencies
 pip install --upgrade pip setuptools wheel
-pip install flask flask-cors
-pip install python-dotenv
-pip install statsbombpy
+pip install -r football_analytics/app_backend/requirements.txt
 
 if [ $? -ne 0 ]; then
     echo "✗ Error installing dependencies"

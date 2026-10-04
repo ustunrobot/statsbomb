@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Football Intelligence - Report Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -12,10 +15,10 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <span class="logo-icon">⚽</span>
+                    <span class="logo-icon">FI</span>
                     <h1>Football Intelligence</h1>
                 </div>
-                <p class="subtitle">Opposition & Player Report Generator</p>
+                <p class="subtitle">Opposition &amp; Player Report Generator</p>
             </div>
         </header>
 
@@ -27,11 +30,9 @@
                     <h2>Generate Report</h2>
                     <div class="download-buttons">
                         <button id="downloadFullSeasonBtn" class="btn btn-info" disabled>
-                            <span class="btn-icon">📥</span>
                             Download Full Season
                         </button>
                         <button id="downloadWeeklyBtn" class="btn btn-info" disabled>
-                            <span class="btn-icon">📅</span>
                             Download Weekly Data
                         </button>
                     </div>
@@ -78,7 +79,6 @@
 
                 <div class="button-group">
                     <button id="generateBtn" class="btn btn-primary" disabled>
-                        <span class="btn-icon">📊</span>
                         Generate Report
                     </button>
                 </div>
@@ -118,11 +118,9 @@
 
                     <div class="result-actions">
                         <a id="downloadLink" href="#" class="btn btn-success" download>
-                            <span class="btn-icon">⬇️</span>
                             Download PDF Report
                         </a>
                         <button id="generateAnotherBtn" class="btn btn-secondary">
-                            <span class="btn-icon">➕</span>
                             Generate Another Report
                         </button>
                     </div>
@@ -139,7 +137,6 @@
                     <p id="errorMessage"></p>
 
                     <button id="dismissErrorBtn" class="btn btn-secondary">
-                        <span class="btn-icon">🔄</span>
                         Try Again
                     </button>
                 </div>

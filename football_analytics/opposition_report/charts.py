@@ -330,13 +330,20 @@ def create_thirds_chart(defensive_metric, middle_metric, final_metric) -> str:
     padding = 15
     inner_width = zone_width - 2 * padding
 
-    # Color mapping based on z-score
-    def get_color(z_score):
-        clamped_z = max(-2.0, min(2.0, z_score))
-        if clamped_z < -0.2:
+    # Color mapping by percentile rank (1 = best), same thresholds as
+    # render_metric_cards()/create_radar_chart(): bottom quartile-ish
+    # (rank >= 18/24) is red, top quintile-ish (rank <= 5/24) is green,
+    # everything else is neutral gray.
+    def get_color(metric):
+        if metric.percentile_total:
+            rank_fraction = metric.percentile_order / metric.percentile_total
+        else:
+            rank_fraction = 0.5
+
+        if rank_fraction >= 18 / 24:
             return "#e74c3c"  # Red
-        elif clamped_z > 0.2:
-            return "#239D56"  # Green   
+        elif rank_fraction <= 5 / 24:
+            return "#239D56"  # Green
         else:
             return "#666666"  # Dark gray
 
@@ -359,7 +366,7 @@ def create_thirds_chart(defensive_metric, middle_metric, final_metric) -> str:
         else:
             display_value = f"{metric.value_pg:.1f}" if metric.value_pg is not None else f"{metric.value:.1f}"
 
-        value_color = get_color(metric.z_score)
+        value_color = get_color(metric)
         svg += f'        <text x="{zone_width/2}" y="70" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="{value_color}" text-anchor="middle">{display_value}</text>\n'
 
         # Percentile info (moved right, larger font)
@@ -380,7 +387,7 @@ def create_thirds_chart(defensive_metric, middle_metric, final_metric) -> str:
         # Z-score indicator bar (mapped to the right-aligned bar)
         clamped_z = max(-2.0, min(2.0, metric.z_score))
         bar_value_x = bar_x + ((clamped_z + 2) / 4) * bar_width
-        bar_color = get_color(metric.z_score)
+        bar_color = get_color(metric)
 
         # Draw filled rect from center to value position
         if metric.z_score >= 0:
@@ -510,10 +517,17 @@ def create_radar_chart(metrics: dict, default_size: int = 320) -> str:
     # Draw metric labels and values
     for i, (metric_name, metric) in enumerate(metrics.items()):
         metric = reverse_metric_if_needed(metric)
-        # Determine color based on z-score
-        if metric.z_score < -0.2:
+        # Determine color by percentile rank (1 = best after reversal above), same
+        # thresholds as render_metric_cards(): bottom quartile-ish (rank >= 18/24)
+        # is red, top quintile-ish (rank <= 5/24) is green, else neutral gray.
+        if metric.percentile_total:
+            rank_fraction = metric.percentile_order / metric.percentile_total
+        else:
+            rank_fraction = 0.5
+
+        if rank_fraction >= 18 / 24:
             value_color = "#e74c3c"  # Red
-        elif metric.z_score > 0.2:
+        elif rank_fraction <= 5 / 24:
             value_color = "#27ae60"  # Green
         else:
             value_color = "#666666"  # Dark gray
@@ -1037,6 +1051,8 @@ def render_metric_cards(metrics_dict: dict, color_mapping: dict = None) -> str:
 
     cards_html = ""
     for metric_name, metric in metrics_dict.items():
+        metric = reverse_metric_if_needed(metric)
+
         z_score = metric.z_score
         bar_end_position = ((z_score + 2) / 4) * 100
         bar_end_position = max(0, min(100, bar_end_position))
@@ -1045,12 +1061,35 @@ def render_metric_cards(metrics_dict: dict, color_mapping: dict = None) -> str:
         bar_width = abs(bar_end_position - bar_start)
         bar_left = min(bar_start, bar_end_position)
 
-        if z_score < -0.2:
-            bar_color = "#e74c3c"
-        elif z_score > 0.2:
-            bar_color = "#27ae60"
+        # Color (card background/border and bar fill) by percentile rank (1 = best
+        # after reversal above): bottom quartile-ish (rank >= 18/24) is red, top
+        # quintile-ish (rank <= 5/24) is green, everything else is neutral gray.
+        if metric.percentile_total:
+            rank_fraction = metric.percentile_order / metric.percentile_total
         else:
-            bar_color = "#666666"
+            rank_fraction = 0.5
+
+        if rank_fraction >= 18 / 24:
+            card_bg_color = "#e3c8c6"
+            card_border_color = "#e74c3c"
+            card_border_width = "9px"
+            value_text_color = "#c0392b"
+        elif rank_fraction <= 5 / 24:
+            card_bg_color = "#c1dccb"
+            card_border_color = "#27ae60"
+            card_border_width = "9px"
+            value_text_color = "#1e8449"
+        else:
+            card_bg_color = "#f8fafc"
+            card_border_color = "#666666"
+            card_border_width = "6px"
+            value_text_color = "#0f1923"
+
+        # Thin border around the whole card: same color as the rank color, double
+        # the original 1px thickness.
+        card_thin_border_width = "2px"
+
+        bar_color = card_border_color
 
         # Use label2 as the main display name
         display_name = metric.label2 if metric.label2 else metric.label
@@ -1062,17 +1101,22 @@ def render_metric_cards(metrics_dict: dict, color_mapping: dict = None) -> str:
         background_class = color_mapping.get(metric_name, "metric-card")
         card_class = f"metric-card {background_class}"
 
+        if metric.show_as_percentage and metric.value_pg is not None:
+            display_value = f"{metric.value_pg * 100:.1f}%"
+        else:
+            display_value = f"{metric.value_pg:.2f}"
+
         cards_html += f"""
-            <div class="{card_class}">
+            <div class="{card_class}" style="background-color: {card_bg_color}; border: {card_thin_border_width} solid {card_border_color}; border-left-width: {card_border_width};">
                 <div class="metric-card-name">{display_name}</div>
-                <div class="metric-card-value">{metric.value_pg:.2f}</div>
+                <div class="metric-card-value" style="color: {value_text_color};">{display_value}</div>
                 <div class="metric-card-zscore">
                     <span class="metric-label-left">{label_text}</span>
                     <span class="metric-percentile-right">{percentile_text}</span>
                 </div>
                 <div class="metric-card-bar">
                     <div class="metric-card-bar-background">
-                        <div class="metric-card-bar-center"></div>
+                        <div class="metric-card-bar-center" style="position: absolute; left: 50%; top: -3px; width: 2px; height: 11px; background-color: #333333; transform: translateX(-50%);" title="Average"></div>
                         <div class="metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
                     </div>
                 </div>

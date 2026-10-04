@@ -69,6 +69,7 @@ def render_appendix_section() -> str:
 
     # Display names used in the report, alphabetically ordered
     metrics_data = [
+        ("Aggression", "The proportion of an opponent's pass receipts that are tackled, fouled or pressured within 2 seconds."),
         ("Aerial Duels", "Total number of aerial duels contested across all matches."),
         ("Aerial Win Rate", "Percentage of aerial duels won."),
         ("Card Counter", "Visual representation of yellow and red cards received."),
@@ -77,6 +78,8 @@ def render_appendix_section() -> str:
         ("Crosses into Box pG", "Number of crosses into the box per game."),
         ("Deep Completions pG", "Successful passes within 20m of opposition goal per game."),
         ("Deep Progression", "Passes, dribbles and carries into opposition final third per game."),
+        ("Defensive Distance", "The average distance from a teams own goal from which it makes defensive actions."),
+        ("Directness", "A ratio of the distance towards goal from the start of possession that ended in a shot, divided by the total distance travelled in buildup to the shot."),
         ("Discipline Score", "Calculated metric showing defensive discipline: (4 × red cards) + yellow cards."),
         ("Dribble Ratio", "Percentage of dribble attempts completed."),
         ("Dribbles pG", "Total dribble attempts per game."),
@@ -91,6 +94,7 @@ def render_appendix_section() -> str:
         ("Pressure", "Pressure application count - tracked per match for pressing intensity trend."),
         ("Pressure Heatmap", "Spatial heatmap showing locations where pressure is applied (4m×4m grid)."),
         ("Pressure Regains vs Pressures", "Scatter chart comparing ball regains from pressing vs total pressure events."),
+        ("PPDA", "How many passes does a team allow the opponent before making a defensive action (tackle, interception, foul). An indicator of pressing intensity in attacking areas."),        
         ("Red Cards", "Total red cards received across all matches."),
         ("Regains from CP pG", "Ball regains within 5 seconds of counterpressing per game."),
         ("Regains pG", "Ball regains within 5 seconds of defensive actions per game."),
@@ -98,9 +102,10 @@ def render_appendix_section() -> str:
         ("Shots", "Total shots - tracked per match to identify shooting trend."),
         ("Shots Conceded from press", "Shots conceded from possessions lost in own half per game."),
         ("Tackles", "Tackle count - tracked per match for defensive engagement trend."),
+        ("Vertical Carries", "Total forward progress toward goal gained via ball carries across all matches, counting only the goal-ward distance and ignoring backward or sideways movement."),
         ("xG Scatter Chart", "Comparative chart showing expected goals for vs expected goals against."),
         ("xGD pG", "Expected goals difference (xG minus xG conceded) per game."),
-        ("xGA Set Piece", "Expected goals conceded from set piece situations across all matches."),
+        ("xGA Set Piece", "Expected goals conceded from set piece situations across all matches."),        
         ("Yellow Cards", "Total yellow cards received across all matches."),
     ]
 

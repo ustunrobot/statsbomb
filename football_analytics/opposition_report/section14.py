@@ -6,9 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from football_analytics.event_based.metrics import Metric
-from football_analytics.opposition_report.charts import create_scatter_chart, create_radar_chart
-from football_analytics.opposition_report.insights_engine import InsightGenerator
+from event_based.metrics import Metric
+from .charts import create_scatter_chart, create_radar_chart
+from .insights_engine import InsightGenerator
 
 section_data = {}
 

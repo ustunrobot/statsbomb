@@ -661,6 +661,29 @@ async function generateReport() {
     }
 }
 
+async function fetchSkillcornerData(competitionId, competitionName, seasonId, seasonName) {
+    try {
+        const response = await apiCall('/skillcorner/fetch', 'POST', {
+            competition_id: competitionId,
+            competition_name: competitionName,
+            season_id: seasonId,
+            season_name: seasonName,
+        });
+
+        if (response.status === 'success') {
+            console.log('✓ SkillCorner physical data downloaded');
+        } else {
+            console.warn('✗ SkillCorner data download failed:', response.message);
+        }
+
+        return response;
+    } catch (error) {
+        // Best-effort: SkillCorner failures should not block the StatsBomb download flow
+        console.error('Error downloading SkillCorner data:', error);
+        return { status: 'error', message: error.message };
+    }
+}
+
 async function downloadFullSeason() {
     if (!appState.selectedCompetition) {
         showError('Missing Selection', 'Please select a competition.');
@@ -690,6 +713,9 @@ async function downloadFullSeason() {
 
     try {
         appState.isGenerating = true;
+
+        // Get competition name/season name for the SkillCorner step (run last, after StatsBomb data)
+        const competition = JSON.parse(elements.competitionSelect.value);
 
         // Show status panel
         showStatus();
@@ -765,6 +791,16 @@ async function downloadFullSeason() {
             updateTeamProgressBar(i + 1, appState.teams.length);
         }
 
+        // Fetch SkillCorner physical data as the last step (best-effort; StatsBomb download already succeeded)
+        updateStatusDisplay(`Downloading SkillCorner physical data...`, 97, false);
+        console.log('Downloading SkillCorner physical data...');
+        const skillcornerResponse = await fetchSkillcornerData(
+            parseInt(appState.selectedCompetition),
+            competition.league,
+            parseInt(appState.selectedSeasonId),
+            competition.season
+        );
+
         appState.isGenerating = false;
         updateStatusDisplay(`✓ Full season download complete!`, 100, false);
         updateTeamProgressBar(appState.teams.length, appState.teams.length);
@@ -786,6 +822,7 @@ async function downloadFullSeason() {
 📋 Season Statistics: 1 set (all teams combined)
 📅 Season Matches: 1 file (all competition matches)
 📹 Total Match Data Files: ${totalEventFiles}
+🏃 SkillCorner Physical Data: ${skillcornerResponse.status === 'success' ? 'Downloaded' : `Failed (${skillcornerResponse.message || 'unknown error'})`}
 
 ${failureCount > 0 ? `⚠️ ${failureCount} team(s) had download issues\n` : ''}All files have been saved to data_temp folder and are ready for analysis.`;
 
@@ -871,6 +908,9 @@ async function downloadWeeklyData() {
     try {
         appState.isGenerating = true;
 
+        // Get competition name/season name for the SkillCorner step (run last, after StatsBomb data)
+        const competition = JSON.parse(elements.competitionSelect.value);
+
         // Show status panel
         showStatus();
 
@@ -907,10 +947,20 @@ async function downloadWeeklyData() {
             week
         );
 
-        appState.isGenerating = false;
-
         if (weekResponse.status === 'success') {
             console.log(`✓ Week ${week} downloaded:`, weekResponse);
+
+            // Fetch SkillCorner physical data as the last step (best-effort; StatsBomb download already succeeded)
+            updateStatusDisplay(`Downloading SkillCorner physical data...`, 97, false);
+            console.log('Downloading SkillCorner physical data...');
+            const skillcornerResponse = await fetchSkillcornerData(
+                parseInt(appState.selectedCompetition),
+                competition.league,
+                parseInt(appState.selectedSeasonId),
+                competition.season
+            );
+
+            appState.isGenerating = false;
             updateStatusDisplay(`✓ Week ${week} download complete!`, 100, false);
 
             showResult(
@@ -928,6 +978,7 @@ async function downloadWeeklyData() {
             const resultMessage = `📋 Season Statistics: 1 set (all teams combined)
 📅 Season Matches: 1 file (all competition matches)
 📹 Match Data Files: ${weekResponse.count}
+🏃 SkillCorner Physical Data: ${skillcornerResponse.status === 'success' ? 'Downloaded' : `Failed (${skillcornerResponse.message || 'unknown error'})`}
 
 All files have been saved to data_temp folder organized by team.`;
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from football_analytics.event_based.metrics import Metric
+from event_based.metrics import Metric
 
 
 def get_styles() -> str:

@@ -34,11 +34,26 @@ logger = logging.getLogger(__name__)
 # Import backend services
 from app_backend.statsbomb_service import get_service as get_statsbomb_service
 from utils.data_loader import get_season_stats, get_player_season_data, get_season_matches, get_team_data, fetch_events_with_360
+from opposition_report.skillcorner_api import fetch_skillcorner_physical_data
 
 # Configuration
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 PORT = int(os.getenv('PORT', 5000))
 HOST = '127.0.0.1'  # Localhost only for security
+
+
+def get_persistent_data_dir() -> Path:
+    """Directory for downloaded/cached match data that must survive app restarts.
+
+    A PyInstaller onefile build extracts to a fresh temp directory on every
+    launch, so anything anchored to __file__ disappears when the app closes.
+    Anchor to the executable's own location instead, which is stable.
+    """
+    if getattr(sys, 'frozen', False):
+        base = Path(sys.executable).parent
+    else:
+        base = Path(__file__).parent.parent
+    return base / 'data_temp'
 
 # Create Flask app
 frontend_path = Path(__file__).parent.parent / 'app_frontend'
@@ -259,7 +274,7 @@ def generate_report():
         logger.info(f"Generating reports for competition {competition_id}, season {season_id}, team {team_name}")
 
         # Create data_temp directory
-        data_temp_dir = Path(__file__).parent.parent / 'data_temp'
+        data_temp_dir = get_persistent_data_dir()
         data_temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Get default credentials
@@ -374,6 +389,7 @@ def generate_player_stats():
 
             # Build command with optional player_id
             cmd = ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'player']
+            cmd.extend(['--data-root', str(get_persistent_data_dir() / 'teams')])
             if player_id:
                 cmd.extend(['--player-id', str(player_id)])
 
@@ -513,7 +529,7 @@ def generate_team_events():
             logger.info(f"Generating event files for team {team_name}")
 
             # Create data_temp directory
-            data_temp_dir = Path(__file__).parent.parent / 'data_temp'
+            data_temp_dir = get_persistent_data_dir()
             data_temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Get credentials
@@ -630,7 +646,7 @@ def generate_week_events():
             logger.info(f"Generating event files for week {week_no}")
 
             # Create data_temp directory
-            data_temp_dir = Path(__file__).parent.parent / 'data_temp'
+            data_temp_dir = get_persistent_data_dir()
             data_temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Get credentials
@@ -713,6 +729,53 @@ def generate_week_events():
         {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache'}
     )
 
+@app.route('/api/skillcorner/fetch', methods=['POST'])
+def fetch_skillcorner():
+    """
+    Fetch and cache SkillCorner physical data (team + player) for a competition/season.
+
+    Request body:
+        - competition_id: int (required)
+        - competition_name: str (required)
+        - season_id: int (required)
+        - season_name: str (required)
+
+    Returns:
+        JSON with status. Intended as a best-effort final step after a
+        StatsBomb download - callers should not treat a failure here as
+        fatal to the overall download.
+    """
+    try:
+        data = request.get_json()
+        competition_id = int(data.get('competition_id'))
+        competition_name = data.get('competition_name')
+        season_id = int(data.get('season_id'))
+        season_name = data.get('season_name')
+
+        if not all([competition_id, competition_name, season_id, season_name]):
+            return jsonify({
+                'status': 'error',
+                'message': 'competition_id, competition_name, season_id and season_name are required'
+            }), 400
+
+        logger.info(f"Fetching SkillCorner physical data for {competition_name} ({season_name})")
+
+        fetch_skillcorner_physical_data(
+            competition_id=competition_id,
+            competition_name=competition_name,
+            season_id=season_id,
+            season_name=season_name,
+        )
+
+        return jsonify({'status': 'success', 'message': 'SkillCorner data downloaded'})
+
+    except Exception as e:
+        logger.error(f"Error fetching SkillCorner data: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to fetch SkillCorner data: {str(e)}'
+        }), 500
+
 # ============================================================================
 @app.route('/api/reports/opposition', methods=['POST'])
 def generate_opposition_report():
@@ -782,7 +845,8 @@ def generate_opposition_report():
             yield f"data: {json.dumps({'status': 'progress', 'step': 1, 'percent': 5, 'message': f'Loading data for {team_name}...'})}\n\n"
 
             process = subprocess.Popen(
-                ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'team'],
+                ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'team',
+                 '--data-root', str(get_persistent_data_dir() / 'teams')],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

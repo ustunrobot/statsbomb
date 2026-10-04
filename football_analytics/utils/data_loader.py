@@ -9,11 +9,9 @@ import csv
 import json
 import sys
 from pathlib import Path
-sys.path.insert(0, "/home/baris/statsbomb")
 #import statsbombpy as sb
 import statsbombpy.sb as sb
 import pandas as pd
-import dataApp.pdf as pdf
 
 def print_object(obj, indent=0, file=None):
     space = " " * indent
@@ -466,8 +464,6 @@ def main():
     #selected = events.iloc[5:20]
     #selected.to_html("events_001.html", index=True)
     #print("Saved to events_rows_6_to_20.html")
-
-    pdf.events_to_pdf(events, output_file="events_data_500_600.pdf", start_row=500, end_row=600)
 
     frames = sb.api_client.frames(4002550, creds=creds)
 

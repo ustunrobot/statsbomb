@@ -2,7 +2,7 @@
 """Section 11: Aerial Wins Across Thirds."""
 
 from .charts import create_thirds_chart, create_heatmap_chart
-from football_analytics.event_based.metrics import Metric
+from event_based.metrics import Metric
 
 
 def get_styles() -> str:

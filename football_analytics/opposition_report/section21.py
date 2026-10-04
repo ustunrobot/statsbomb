@@ -6,8 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from football_analytics.event_based.metrics import Metric
-from football_analytics.opposition_report.charts import create_radar_chart, render_metric_cards
+from event_based.metrics import Metric
+from .charts import create_radar_chart, render_metric_cards
+from .section17 import get_card_metrics_to_display
 
 def get_player_attacking_metrics_to_display(player_stats: dict) -> dict:
     """Extract attacking profile metrics for radar chart display."""
@@ -145,6 +146,45 @@ def get_player_summary_metrics_to_display(player_stats: dict) -> dict:
 
     return metrics_to_display
 
+def get_player_physical_radar_metrics(source_metrics: dict, suffix: str) -> dict:
+    """Extract the physical metrics for one radar (all / h1 / h2) - the same metric
+    set (running volume, HI distance, change of direction, sprint count) used in
+    section17's team radar, drawn from a single time-window source."""
+    metrics_to_display = {}
+
+    if "p90" in suffix:
+      metric_keys = [
+          (f'total_metersperminute_{suffix}', 'meters/min', 'Running Volume', False),
+          (f'hi_distance_{suffix}', 'meters', 'HI Running Distance', False),
+          (f'cod_count_{suffix}', '', '#Change of Direction', False),
+          (f'sprint_distance_{suffix}', '', 'Sprint Distance', False),
+          (f'total_distance_{suffix}', '', 'Total Distance', False),
+          (f'timetosprint_top3', '', 'Time to Sprint', True),
+          (f'timeto505around180_top3', '', 'Time 505 COD', True),
+          
+      ]
+    else:
+       metric_keys = [
+                 (f'total_metersperminute_{suffix}', 'meters/min', 'Running Volume', False),
+                 (f'hi_distance_{suffix}', 'meters', 'HI Running Distance', False),
+                 (f'cod_count_{suffix}', '', '#Change of Direction', False),
+                 (f'sprint_count_{suffix}', '', 'Sprint Count', False),
+                 (f'sprint_distance_{suffix}', '', 'Sprint Distance', False),
+                 (f'highaccel_count_{suffix}', '', 'Hi Accel Count', False),
+                 (f'hsr_distance_{suffix}', '', 'Hi Speed Distance', False),
+                 (f'hsr_count_{suffix}', '', 'Hi Speed Count', False),
+             ] 
+
+    for key, custom_label, label2, rev in metric_keys:
+        metric = source_metrics.get(key, Metric.default())
+        metric.label = custom_label
+        metric.label2 = label2
+        metric.reverse = rev
+        metrics_to_display[key] = metric
+        
+    return metrics_to_display
+
+
 def render_minutes_info(player_stats: dict) -> str:
     """Render minutes played info with warning if below threshold as a single line."""
     minutes_played = player_stats.get('player_season_minutes')
@@ -183,7 +223,7 @@ def render_minutes_info(player_stats: dict) -> str:
     """
     return html
 
-def render_player_radar_section(player_stats: dict) -> str:
+def render_player_radar_section(player_stats: dict, player_stats_sk: dict = None) -> str:
     """Render player radar chart sections for attacking, possession, and defending profiles."""
     player_name = player_stats.get('player_name', 'Unknown Player')
 
@@ -205,6 +245,24 @@ def render_player_radar_section(player_stats: dict) -> str:
 
     # Minutes played info
     minutes_info_html = render_minutes_info(player_stats)
+
+    # Physical profile (SkillCorner) - full match / 1st half / 2nd half radars, plus summary cards
+    player_stats_sk = player_stats_sk or {}
+    physical_all = player_stats_sk.get('player_all', {})
+    physical_h1 = player_stats_sk.get('player_h1', {})
+    physical_h2 = player_stats_sk.get('player_h2', {})
+
+    physical_all_metrics = get_player_physical_radar_metrics(physical_all, 'full_all_p90')
+    physical_all_radar_svg = create_radar_chart(physical_all_metrics, default_size=320)
+
+    physical_h1_metrics = get_player_physical_radar_metrics(physical_h1, 'h1_all')
+    physical_h1_radar_svg = create_radar_chart(physical_h1_metrics, default_size=320)
+
+    physical_h2_metrics = get_player_physical_radar_metrics(physical_h2, 'h2_all')
+    physical_h2_radar_svg = create_radar_chart(physical_h2_metrics, default_size=320)
+
+    physical_card_metrics = get_card_metrics_to_display(physical_all)
+    physical_cards_html = render_metric_cards(physical_card_metrics)
 
     html = f"""
     <section class="s21-radar-section">
@@ -243,6 +301,35 @@ def render_player_radar_section(player_stats: dict) -> str:
             </div>
 
             {minutes_info_html}
+
+            <div class="s21-subtitle-row">
+                <p class="s21-section-subtitle">Physical data (SkillCorner): full match, 1st half, 2nd half</p>
+            </div>
+
+            <div class="s21-radar-container">
+                <div class="s21-chart-column">
+                    <p class="s21-chart-title">Full Match</p>
+                    <div class="s21-radar-chart-wrapper">
+                        {physical_all_radar_svg}
+                    </div>
+                </div>
+                <div class="s21-chart-column">
+                    <p class="s21-chart-title">1st Half</p>
+                    <div class="s21-radar-chart-wrapper">
+                        {physical_h1_radar_svg}
+                    </div>
+                </div>
+                <div class="s21-chart-column">
+                    <p class="s21-chart-title">2nd Half</p>
+                    <div class="s21-radar-chart-wrapper">
+                        {physical_h2_radar_svg}
+                    </div>
+                </div>
+            </div>
+
+            <div class="s21-summary-metrics">
+                {physical_cards_html}
+            </div>
         </div>
     </section>
     """

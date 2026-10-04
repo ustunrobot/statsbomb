@@ -7,7 +7,7 @@ import math
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from football_analytics.event_based.metrics import Metric
+from event_based.metrics import Metric
 
 def create_pie_chart(team_metrics: dict) -> str:
     """Create an SVG pie chart showing shot type distribution."""

@@ -9,7 +9,6 @@ Responsibilities:
 
 from typing import Dict, Callable, List
 from .kpi.xg_layer import XGLayer
-from .kpi.xg_findings import XGFindingsLayer
 from .kpi.possession_layer import PossessionLayer
 from .kpi.passing_layer import PassingLayer
 from .kpi.defending_layer import DefendingLayer
@@ -299,28 +298,6 @@ class EventProcessor:
                     # If calculation fails, log it and create a default Metric
                     print(f"Error calculating derived metric '{metric_name}' for team {team_id}: {e}")
                     team_data[metric_name] = Metric.default()
-
-    def _evaluate_findings(self, findings_layer: XGFindingsLayer, xg_aggregates: Dict) -> Dict:
-        """
-        Evaluate findings for all teams.
-
-        Args:
-            findings_layer: XGFindingsLayer instance
-            xg_aggregates: Dictionary of teams with xG metrics
-
-        Returns:
-            Dictionary mapping team_id to list of findings
-        """
-        findings_by_team = {}
-        for team_id, team_data in xg_aggregates.items():
-            findings = findings_layer.evaluate_team(
-                team_id,
-                team_data.get('team_name', 'Unknown'),
-                team_data
-            )
-            findings_by_team[team_id] = findings
-
-        return findings_by_team
 
     def _calculate_metric_percentiles(self, team_aggregates: Dict, field_name: str, derived_metrics: Dict = None) -> None:
         """

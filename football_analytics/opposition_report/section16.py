@@ -3,7 +3,7 @@
 
 from copy import deepcopy
 from .charts import create_trend_chart
-from ..event_based.metrics import Metric
+from event_based.metrics import Metric
 
 
 def get_styles() -> str:
@@ -15,7 +15,7 @@ def get_styles() -> str:
     padding-left: 50px;
     padding-right: 20px;
     padding-top: 30px;
-
+    page-break-after: always;
 }
 
 .section16-title {

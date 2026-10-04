@@ -2,7 +2,7 @@
 """Section 15: Pressure Heatmap."""
 
 from .charts import create_heatmap_chart, create_discipline_score_chart, create_card_counter_chart
-from football_analytics.event_based.metrics import Metric
+from event_based.metrics import Metric
 
 
 def get_styles() -> str:
@@ -169,8 +169,10 @@ def render_pressure_heatmap_section(team_metrics: dict, team_name: str) -> str:
 
     html = f"""
     <div class="section15-container">
-        <div class="section15-heatmap-wrapper">
-            <div class="section15-heatmap-container">
+        <div class="section15-heatmap-wrapper">            
+            <div class="section15-heatmap-container">                
+                <br/>
+                <br/>
                 <div class="section15-heatmap-label">Pressure Locations Across Pitch</div>
                 <div class="section15-heatmap-with-arrow">
                     {pressure_heatmap_chart}
@@ -182,6 +184,8 @@ def render_pressure_heatmap_section(team_metrics: dict, team_name: str) -> str:
                 {stats_html}
             </div>
             <div class="section15-chart-box">
+                <br/>
+                <br/>
                 {discipline_chart}
                 {card_chart}
             </div>
