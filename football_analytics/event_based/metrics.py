@@ -19,6 +19,7 @@ class Metric:
     reverse: bool = False
     heatmap: Optional[List[List[float]]] = field(default=None)  # 20x30 grid (4m x 4m cells)
     value_trend: Optional[List[float]] = field(default=None)  # Per-match history: one value per match
+    secondary_z_score: Optional[float] = field(default=None)  # For metrics with a secondary z-score (e.g., HI Distance)
 
     @classmethod
     def default(cls):

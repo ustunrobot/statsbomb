@@ -55,6 +55,28 @@ def fetch_events_with_360(match_id: int, creds: dict | None = None, include_360:
 
     return result
 
+def fetch_player_match_stats(match_id: int, creds: dict | None = None):
+    """Fetch player match stats for a match."""
+    if creds is None:
+        creds = {}
+
+    print(f"\nFetching player match stats for match {match_id}...")
+    player_match_stats = sb.player_match_stats(match_id, fmt="dict", creds=creds)
+    print(f"✓ Fetched player match stats for match {match_id}")
+
+    return player_match_stats
+
+def fetch_team_match_stats(match_id: int, creds: dict | None = None):
+    """Fetch team match stats for a match."""
+    if creds is None:
+        creds = {}
+
+    print(f"\nFetching team match stats for match {match_id}...")
+    team_match_stats = sb.team_match_stats(match_id, fmt="dict", creds=creds)
+    print(f"✓ Fetched team match stats for match {match_id}")
+
+    return team_match_stats
+
 def save_events_json(match_id: int, output_file: str, creds: dict | None = None):
     """Fetch events for a match and save as JSON file."""
     if creds is None:

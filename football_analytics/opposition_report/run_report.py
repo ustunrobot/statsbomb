@@ -15,23 +15,54 @@ from opposition_report import section0, section1, section2, section3, section4, 
 from event_based.data_provider import DataProvider
 from event_based.event_processor import EventProcessor
 
-def get_team_stats(competition_id: int, season_id: int, data_root: str = None) -> dict:
+def get_team_stats(competition_id: int, season_id: int, data_root: str = None, team_name: str = None, week_no: int = None) -> dict:
     """Process event data and return aggregates for the given team."""
     provider = DataProvider(data_root=data_root)
-    return provider.get_team_stats(competition_id, season_id)
+    return provider.get_team_stats(competition_id, season_id, team_name=team_name, week_no=week_no)
 
-def get_team_stats_sk(competition_id: int, season_id: int, data_root: str = None) -> dict:
-    """Process event data and return aggregates for the given team."""
+def get_week_match_teams(provider: DataProvider, team_name: str, season_name: str, week_no: int):
+    """
+    Resolve the home/away team names (StatsBomb convention) for team_name's
+    week_no match, from its event filename (see DataProvider.get_team_weeks).
+
+    Returns (home_name, away_name), or (None, None) if team_name, week_no or
+    season_name is missing, or no match is found for that week.
+    """
+    if not (team_name and week_no is not None and season_name):
+        return None, None
+
+    weeks = provider.get_team_weeks(team_name, season_name)
+    week_entry = next((w for w in weeks if w['week_no'] == week_no), None)
+    if week_entry is None:
+        return None, None
+
+    return provider._get_teams_from_filename(week_entry['filename'])
+
+def get_team_stats_sk(competition_id: int, season_id: int, data_root: str = None, team_name: str = None,
+                       week_no: int = None, season_name: str = None) -> dict:
+    """Process event data and return aggregates for the given team.
+
+    When team_name, week_no and season_name are all given, team_name's season-level
+    SkillCorner stats are overridden with its match-level stats for that week.
+    """
     provider = DataProvider(data_root=data_root)
+
+    home_name, away_name = get_week_match_teams(provider, team_name, season_name, week_no)
+    if home_name and away_name:
+        return provider.get_team_stats_sk(
+            competition_id, season_id, team_name=team_name, home_name=home_name, away_name=away_name
+        )
+
     return provider.get_team_stats_sk(competition_id, season_id)
 
-def get_aggregates_for_team(season: str, data_root: str = None) -> dict:
+def get_aggregates_for_team(season: str, data_root: str = None, team_name: str = None, week_no: int = None) -> dict:
     """Process event data and return aggregates for the given team."""
     provider = DataProvider(data_root=data_root)
     processor = EventProcessor()
 
-    # Load and process matches
-    matches = provider.get_matches(seasons=[season])  # Specify the season(s) you want to include
+    # Load and process matches. When both team_name and week_no are given, team_name's
+    # matches outside week_no are excluded; every other team's matches are unaffected.
+    matches = provider.get_matches(seasons=[season], team_name=team_name, week_no=week_no)
     total_matches = len(matches)
     print(f"Processing {total_matches} matches...", flush=True)
     print(f"[PROGRESS]2|60|Processing event data: Loading files...", flush=True)
@@ -217,6 +248,7 @@ if __name__ == "__main__":
     parser.add_argument('report_type', choices=['player', 'team'], help='Report type: "player" or "team"')
     parser.add_argument('--player-id', type=int, default=None, help='Optional: Player ID to include in report')
     parser.add_argument('--data-root', default=None, help='Directory containing downloaded team match-event folders (defaults to a path relative to this file, for local/dev runs)')
+    parser.add_argument('--week-no', type=int, default=None, help="Optional: Restrict team's matches to this week number only (other teams' matches are unaffected)")
 
     args = parser.parse_args()
 
@@ -228,6 +260,7 @@ if __name__ == "__main__":
     report_type = args.report_type
     player_id = args.player_id
     data_root = args.data_root
+    week_no = args.week_no
 
     if player_id:
         print(f"Generating {report_type} opposition report for {team_name} in {season_id}: {season} ({competition_id}: {league}), Player ID: {player_id}...")
@@ -243,11 +276,17 @@ if __name__ == "__main__":
 
     # Get aggregates from event data
     print(f"[PROGRESS]2|20|Loading match data...", flush=True)
-    all_metrics = get_aggregates_for_team(season, data_root=data_root)
+    all_metrics = get_aggregates_for_team(season, data_root=data_root, team_name=team_name, week_no=week_no)
     # Get stats for all teams (organized by team_name)
     print(f"[PROGRESS]3|96|Loading team statistics...", flush=True)
-    statsbomb_team_metrics = get_team_stats(competition_id, season_id, data_root=data_root)
-    skillcorner_team_metrics = get_team_stats_sk(competition_id, season_id, data_root=data_root)
+    statsbomb_team_metrics = get_team_stats(competition_id, season_id, data_root=data_root, team_name=team_name, week_no=week_no)
+    skillcorner_team_metrics = get_team_stats_sk(
+        competition_id, season_id, data_root=data_root, team_name=team_name, week_no=week_no, season_name=season
+    )
+
+    # Resolve the week's home/away team names once, for overriding player SkillCorner
+    # stats with their match-level numbers (see get_player_stats_sk calls below).
+    player_sk_home_name, player_sk_away_name = get_week_match_teams(provider, team_name, season, week_no)
 
     # Get stats for all players
     #all_player_stats = provider.get_all_player_stats(competition_id, season_id)
@@ -293,11 +332,16 @@ if __name__ == "__main__":
         if player_id:
             # Get stats for specific player
             print(f"[PROGRESS]5|98|Retrieving stats for player ID: {player_id}...", flush=True)
-            player_stats = provider.get_player_stats(int(competition_id), int(season_id), player_id)
+            player_stats = provider.get_player_stats(
+                int(competition_id), int(season_id), player_id, team_name=team_name, week_no=week_no
+            )
             if player_stats:
                 player_stats_list.append(player_stats)
                 #player_name = player_stats.get('player_name')
-            player_stats_sk = provider.get_player_stats_sk(int(competition_id), int(season_id), player_id)
+            player_stats_sk = provider.get_player_stats_sk(
+                int(competition_id), int(season_id), player_id,
+                team_name=team_name, home_name=player_sk_home_name, away_name=player_sk_away_name
+            )
             if player_stats_sk:
                 player_stats_list_sk.append(player_stats_sk)
         else:
@@ -308,11 +352,16 @@ if __name__ == "__main__":
                 print(f"[PROGRESS]5|98|Retrieving stats for {len(team_player_ids)} players from {team_name}...", flush=True)
 
                 for idx, player_id_item in enumerate(team_player_ids, 1):
-                    player_stats = provider.get_player_stats(int(competition_id), int(season_id), player_id_item)
+                    player_stats = provider.get_player_stats(
+                        int(competition_id), int(season_id), player_id_item, team_name=team_name, week_no=week_no
+                    )
                     if player_stats:
                         player_stats_list.append(player_stats)
 
-                    player_stats_sk = provider.get_player_stats_sk(int(competition_id), int(season_id), player_id_item)
+                    player_stats_sk = provider.get_player_stats_sk(
+                        int(competition_id), int(season_id), player_id_item,
+                        team_name=team_name, home_name=player_sk_home_name, away_name=player_sk_away_name
+                    )
                     if player_stats_sk:
                         player_stats_list_sk.append(player_stats_sk)
 

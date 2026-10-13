@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 
 # Import backend services
 from app_backend.statsbomb_service import get_service as get_statsbomb_service
-from utils.data_loader import get_season_stats, get_player_season_data, get_season_matches, get_team_data, fetch_events_with_360
+from utils.data_loader import get_season_stats, get_player_season_data, get_season_matches, get_team_data, fetch_events_with_360, fetch_player_match_stats, fetch_team_match_stats
 from opposition_report.skillcorner_api import fetch_skillcorner_physical_data
+from event_based.data_provider import DataProvider
 
 # Configuration
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -242,6 +243,54 @@ def get_players(team_id):
         }), 500
 
 # ============================================================================
+# ROUTES: API - Weeks
+# ============================================================================
+
+@app.route('/api/weeks', methods=['GET'])
+def get_weeks():
+    """
+    Get available match weeks for a team/season, based on already-downloaded
+    event files, for the optional week filter.
+
+    Query parameters:
+        - team_name: Required
+        - season_name: Required (e.g. "2025/2026")
+
+    Returns:
+        JSON with weeks list containing:
+        - week_no: int
+        - filename: str
+        - match_name: str (e.g. "Week 10: Barnet vs Accrington Stanley")
+    """
+    try:
+        team_name = request.args.get('team_name')
+        season_name = request.args.get('season_name')
+
+        if not team_name or not season_name:
+            return jsonify({
+                'status': 'error',
+                'message': 'team_name and season_name are required'
+            }), 400
+
+        logger.info(f"Fetching weeks for {team_name} ({season_name})...")
+
+        provider = DataProvider(data_root=str(get_persistent_data_dir() / 'teams'))
+        weeks = provider.get_team_weeks(team_name, season_name)
+
+        return jsonify({
+            'status': 'success',
+            'data': weeks,
+            'count': len(weeks)
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching weeks: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to fetch weeks: {str(e)}'
+        }), 500
+
+# ============================================================================
 # ROUTES: API - Report Generation
 # ============================================================================
 
@@ -363,8 +412,9 @@ def generate_player_stats():
         league_name = data.get('league_name')
         report_type = data.get('report_type', 'player')
         player_id = data.get('player_id')
+        week_no = data.get('week_no')
 
-        logger.info(f"Extracted params - team: {team_name}, season: {season_name}, league: {league_name}, report_type: {report_type}, player_id: {player_id}")
+        logger.info(f"Extracted params - team: {team_name}, season: {season_name}, league: {league_name}, report_type: {report_type}, player_id: {player_id}, week_no: {week_no}")
 
         if not all([team_name, season_name, league_name, competition_id, season_id]):
             return jsonify({
@@ -392,6 +442,8 @@ def generate_player_stats():
             cmd.extend(['--data-root', str(get_persistent_data_dir() / 'teams')])
             if player_id:
                 cmd.extend(['--player-id', str(player_id)])
+            if week_no:
+                cmd.extend(['--week-no', str(week_no)])
 
             logger.info(f"Executing: {' '.join(cmd)}")
 
@@ -593,6 +645,17 @@ def generate_team_events():
                     json.dump(events, f, indent=2)
                 event_files.append(str(filepath))
 
+                # Fetch and save player/team match stats
+                player_match_stats = fetch_player_match_stats(match_id, creds=creds)
+                player_stats_filename = f"Week{week}_{home}_vs_{away}_player_stats.json"
+                with open(team_season_dir / player_stats_filename, 'w') as f:
+                    json.dump(player_match_stats, f, indent=2)
+
+                team_match_stats = fetch_team_match_stats(match_id, creds=creds)
+                team_stats_filename = f"Week{week}_{home}_vs_{away}_team_stats.json"
+                with open(team_season_dir / team_stats_filename, 'w') as f:
+                    json.dump(team_match_stats, f, indent=2)
+
                 # Send progress update
                 percent = int((idx / total_matches) * 100)
                 yield f"data: {json.dumps({'status': 'progress', 'total': total_matches, 'current': idx, 'percent': percent})}\n\n"
@@ -698,7 +761,11 @@ def generate_week_events():
                 data_obj = fetch_events_with_360(match_id, creds=creds, include_360=True)
                 events = data_obj["events"]
 
-                # Save events for both home and away teams
+                # Fetch player/team match stats
+                player_match_stats = fetch_player_match_stats(match_id, creds=creds)
+                team_match_stats = fetch_team_match_stats(match_id, creds=creds)
+
+                # Save events and stats for both home and away teams
                 for team in [home, away]:
                     team_season_dir = data_temp_dir / "teams" / team / season_folder_name
                     team_season_dir.mkdir(parents=True, exist_ok=True)
@@ -709,6 +776,14 @@ def generate_week_events():
                     with open(filepath, 'w') as f:
                         json.dump(events, f, indent=2)
                     event_files.append(str(filepath))
+
+                    player_stats_filename = f"Week{week}_{home}_vs_{away}_player_stats.json"
+                    with open(team_season_dir / player_stats_filename, 'w') as f:
+                        json.dump(player_match_stats, f, indent=2)
+
+                    team_stats_filename = f"Week{week}_{home}_vs_{away}_team_stats.json"
+                    with open(team_season_dir / team_stats_filename, 'w') as f:
+                        json.dump(team_match_stats, f, indent=2)
 
                 # Send progress update
                 percent = int((idx / total_matches) * 100)
@@ -813,8 +888,9 @@ def generate_opposition_report():
         team_name = data.get('team_name')
         season_name = data.get('season_name')
         league_name = data.get('league_name')
+        week_no = data.get('week_no')
 
-        logger.info(f"Extracted params - team: {team_name}, season: {season_name}, league: {league_name}, comp_id: {competition_id}, season_id: {season_id}")
+        logger.info(f"Extracted params - team: {team_name}, season: {season_name}, league: {league_name}, comp_id: {competition_id}, season_id: {season_id}, week_no: {week_no}")
 
         if not all([team_name, season_name, league_name, competition_id, season_id]):
             return jsonify({
@@ -844,9 +920,13 @@ def generate_opposition_report():
 
             yield f"data: {json.dumps({'status': 'progress', 'step': 1, 'percent': 5, 'message': f'Loading data for {team_name}...'})}\n\n"
 
+            cmd = ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'team',
+                   '--data-root', str(get_persistent_data_dir() / 'teams')]
+            if week_no:
+                cmd.extend(['--week-no', str(week_no)])
+
             process = subprocess.Popen(
-                ['python', str(run_report_path), team_name, season_name_clean, league_name, str(competition_id), str(season_id), 'team',
-                 '--data-root', str(get_persistent_data_dir() / 'teams')],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

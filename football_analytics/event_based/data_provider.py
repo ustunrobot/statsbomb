@@ -84,6 +84,8 @@ class DataProvider:
     def get_matches(
         self,
         seasons: List[str] = None,
+        team_name: str = None,
+        week_no: int = None,
     ) -> List[Tuple[str, Dict]]:
         """
         Collect and load match event files in chronological order.
@@ -91,6 +93,11 @@ class DataProvider:
         Args:
             seasons: List of season folders to include (e.g. ['25-26', '26-27']).
                     Defaults to ['25-26', '26-27'].
+            team_name: Optional team name. Only takes effect when week_no is
+                    also given: team_name's matches in every week other than
+                    week_no are filtered out. Matches of all other teams are
+                    left untouched.
+            week_no: Optional week number. See team_name.
 
         Returns:
             List of tuples: (match_filename, event_data_dict)
@@ -110,6 +117,17 @@ class DataProvider:
         unique_matches = self._deduplicate_and_sort(match_files)
         print(f"[DataProvider] After deduplication: {len(unique_matches)} unique matches", flush=True)
 
+        # If both team_name and week_no are given, drop team_name's matches in
+        # every other week - matches of all other teams are left untouched.
+        if team_name is not None and week_no is not None:
+            before_count = len(unique_matches)
+            unique_matches = [
+                match_path for match_path in unique_matches
+                if team_name not in self._get_teams_from_filename(match_path.name)
+                or self._get_week_from_filename(match_path.name) == week_no
+            ]
+            print(f"[DataProvider] Filtered {team_name} to week {week_no}: {before_count} -> {len(unique_matches)} matches", flush=True)
+
         # Load and return event data
         matches = []
         for i, match_filename in enumerate(unique_matches, 1):
@@ -123,6 +141,49 @@ class DataProvider:
         print(f"[DataProvider] Successfully loaded {len(matches)}/{len(unique_matches)} matches", flush=True)
         return matches
 
+    def get_team_weeks(self, team_name: str, season_name: str) -> List[Dict]:
+        """
+        List available match weeks for a team/season, based on already-downloaded
+        event files in data_root/<team_name>/<season_folder>/.
+
+        Args:
+            team_name: Team name (matches the folder name under data_root)
+            season_name: Season name, e.g. "2025/2026" (converted to the
+                        "2025-2026" folder naming convention used on disk)
+
+        Returns:
+            List of dicts sorted by week number:
+            {'week_no': int, 'filename': str, 'match_name': str}
+        """
+        season_folder = season_name.replace('/', '-')
+        team_season_dir = self.data_root / team_name / season_folder
+
+        print(f"[DataProvider] Looking for weeks in: {team_season_dir}")
+
+        if not team_season_dir.exists():
+            print(f"[DataProvider] Team season directory not found: {team_season_dir}")
+            return []
+
+        weeks = []
+        for event_file in team_season_dir.glob("Week*.json"):
+            if event_file.name.endswith("_360frames.json"):
+                continue
+            if event_file.name.endswith("_stats.json"):
+                continue
+
+            week_no = self._get_week_from_filename(event_file.name)
+            home_team, away_team = self._get_teams_from_filename(event_file.name)
+
+            weeks.append({
+                'week_no': week_no,
+                'filename': event_file.name,
+                'match_name': f"Week {week_no}: {home_team} vs {away_team}",
+            })
+
+        weeks.sort(key=lambda w: w['week_no'])
+        print(f"[DataProvider] Found {len(weeks)} weeks for {team_name} ({season_name})")
+        return weeks
+
     def _collect_match_files(self, seasons: List[str]) -> List[Path]:
         """
         Scan all team directories and collect valid match event files.
@@ -130,7 +191,7 @@ class DataProvider:
         Filters:
         - Must be JSON
         - Must start with 'Week'
-        - Must not end with '_360frames.json'
+        - Must not end with '_360frames.json' or _stats.json
 
         Returns:
             List of Path objects to valid match files.
@@ -164,6 +225,8 @@ class DataProvider:
                     # Skip 360frames files
                     if event_file.name.endswith("_360frames.json"):
                         continue
+                    if event_file.name.endswith("_stats.json"):
+                                            continue
 
                     print(f"[DataProvider] Found match file: {event_file.name}")
                     match_files.append(event_file)
@@ -188,17 +251,30 @@ class DataProvider:
                 seen_filenames[filename] = file_path
 
         # Sort by week number extracted from filename
-        def extract_week(path: Path) -> int:
-            filename = path.name
-            # Extract 'Week10' from 'Week10_Barnet_vs_Accrington Stanley.json'
-            week_str = filename.split('_')[0].replace('Week', '')
-            try:
-                return int(week_str)
-            except ValueError:
-                return 999  # Put unparseable files at the end
-
-        sorted_matches = sorted(seen_filenames.values(), key=extract_week)
+        sorted_matches = sorted(seen_filenames.values(), key=lambda path: self._get_week_from_filename(path.name))
         return sorted_matches
+
+    @staticmethod
+    def _get_week_from_filename(filename: str) -> int:
+        """Extract week number from a match filename, e.g. 'Week10' from 'Week10_Barnet_vs_Accrington Stanley.json'."""
+        week_str = filename.split('_')[0].replace('Week', '')
+        try:
+            return int(week_str)
+        except ValueError:
+            return 999  # Put unparseable files at the end
+
+    @staticmethod
+    def _get_teams_from_filename(filename: str) -> Tuple[str, str]:
+        """Extract (home_team, away_team) from a match filename, e.g. ('Barnet', 'Accrington Stanley') from 'Week10_Barnet_vs_Accrington Stanley.json'."""
+        name_without_ext = filename[:-5] if filename.endswith('.json') else filename
+        parts = name_without_ext.split('_vs_')
+        if len(parts) != 2:
+            return ('', '')
+
+        home_part, away_part = parts
+        # home_part is like 'Week10_Barnet' - strip the 'WeekN_' prefix
+        home_team = home_part.split('_', 1)[1] if '_' in home_part else home_part
+        return (home_team, away_part)
 
     def _load_event_file(self, file_path: Path) -> Dict:
         """
@@ -217,7 +293,7 @@ class DataProvider:
             print(f"Error loading event file {file_path}: {e}")
             return None
 
-    def process_player_stats(self, stats, player_id: int) -> Dict:
+    def process_player_stats(self, stats, player_id: int, match_stats: Dict = None) -> Dict:
         """
         Process player statistics and calculate percentiles and z-scores.
         Only compares against players in similar positions using POSITION_COMPARISON_SETS.
@@ -225,6 +301,13 @@ class DataProvider:
         Args:
             stats: List or dict from player_stats.json file
             player_id: ID of the player to process
+            match_stats: Optional dict of player_id's match-level stats (one entry
+                from a Week{N}_..._player_stats.json file). When given, player_id's
+                entry is overridden in place (each player_season_* value replaced
+                with its match-level equivalent - player_season_ -> player_match_,
+                dropping a trailing '_90', or 0 if no equivalent is found) before
+                any percentile/z-score comparisons run, so this player's displayed
+                value and its rank among comparable players stay consistent.
 
         Returns:
             Dictionary with Metric objects for the given player, keyed by player_season_* metric names
@@ -249,6 +332,29 @@ class DataProvider:
             return {}
         else:
             print(f"{player_id} found. Name: {player_data.get('player_name')} primary: -{player_data.get('primary_position')}-")
+
+        if match_stats is not None:
+            # Build an overridden copy of this player's entry with match-level values
+            # (player_season_* -> player_match_*, dropping a trailing '_90'), and swap
+            # it into stats_list in place of the season-level entry. This keeps the
+            # percentile/rank comparisons below consistent with the value being
+            # displayed for this player - otherwise player_value (overridden) would
+            # never be found among the comparison values (still season-level, pulled
+            # from this same unmodified entry), making .index() always fail and the
+            # rank always fall back to last place regardless of the actual z-score.
+            overridden_player_data = dict(player_data)
+            for key, value in player_data.items():
+                if key.startswith('player_season_') and isinstance(value, (int, float)):
+                    match_key = 'player_match_' + key[len('player_season_'):]
+                    if match_key.endswith('_90'):
+                        match_key = match_key[:-len('_90')]
+                    overridden_player_data[key] = match_stats.get(match_key, 0)
+
+            stats_list = [
+                overridden_player_data if isinstance(p, dict) and p.get('player_id') == player_id else p
+                for p in stats_list
+            ]
+            player_data = overridden_player_data
 
         # Get player position from primary_position field and find corresponding ID
         player_position_text = player_data.get('primary_position')
@@ -812,13 +918,19 @@ class DataProvider:
         print(f"[DataProvider] ✓ Processed {len(result)} SkillCorner metrics for {player_name}")
         return result
 
-    def get_team_stats(self, competition_id: int, season_id: int) -> Dict:
+    def get_team_stats(self, competition_id: int, season_id: int, team_name: str = None, week_no: int = None) -> Dict:
         """
         Load aggregated season statistics for all teams in a competition and season.
 
         Args:
             competition_id: StatsBomb competition ID (e.g., 5)
             season_id: StatsBomb season ID (e.g., 351)
+            team_name: Optional team name. Only takes effect when week_no is also
+                    given: team_name's season-stats entry is replaced with its
+                    match-level stats from that week (see
+                    _apply_week_team_stats_override). Every other team's entry is
+                    left untouched.
+            week_no: Optional week number. See team_name.
 
         Returns:
             Dictionary organized by team_name with metrics for each team:
@@ -846,6 +958,10 @@ class DataProvider:
                 with open(stats_file, 'r', encoding='utf-8') as f:
                     stats = json.load(f)
                     print(f"[DataProvider] ✓ Loaded stats from {stats_file}")
+
+                    if team_name is not None and week_no is not None:
+                        stats = self._apply_week_team_stats_override(stats, team_name, week_no)
+
                     # Process all teams and return full stats
                     all_teams_stats = self.process_team_stats(stats)
                     return all_teams_stats
@@ -855,6 +971,95 @@ class DataProvider:
         else:
             print(f"[DataProvider] Stats file not found: {stats_file}")
             return {}
+
+    def _apply_week_team_stats_override(self, stats, team_name: str, week_no: int):
+        """
+        Replace team_name's entry in the season-stats list with its match-level
+        stats from Week{week_no}_..._team_stats.json, so a report can be built
+        from just that one week's numbers instead of the season average. Every
+        other team's entry in `stats` is left untouched.
+
+        The team_stats.json file holds one object per team in that match (this
+        team and its opponent); only the object matching team_name is used.
+        Its 'team_match_*' keys are renamed to 'team_season_*' so the result
+        is picked up by process_team_stats() exactly like the season-stats
+        file's own fields.
+
+        Args:
+            stats: List (or dict) loaded from the allseason_stats.json file
+            team_name: Team whose entry should be overridden
+            week_no: Week number to pull the override from
+
+        Returns:
+            The stats list with team_name's entry replaced (or unchanged if no
+            matching week_stats file / team entry could be found).
+        """
+        team_dir = self.data_root / team_name
+        week_stats_matches = sorted(team_dir.glob(f"*/Week{week_no}_*_team_stats.json"))
+
+        if not week_stats_matches:
+            print(f"[DataProvider] No team_stats.json found for {team_name}, week {week_no} under {team_dir}")
+            return stats
+
+        week_stats_file = week_stats_matches[0]
+        print(f"[DataProvider] Overriding {team_name}'s season stats with week {week_no} stats from {week_stats_file}")
+
+        try:
+            with open(week_stats_file, 'r', encoding='utf-8') as f:
+                week_stats = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[DataProvider] Error loading week stats file {week_stats_file}: {e}")
+            return stats
+
+        week_stats_list = week_stats if isinstance(week_stats, list) else (
+            list(week_stats.values()) if isinstance(week_stats, dict) else []
+        )
+
+        team_week_entry = next(
+            (entry for entry in week_stats_list if isinstance(entry, dict) and entry.get('team_name') == team_name),
+            None
+        )
+
+        if team_week_entry is None:
+            print(f"[DataProvider] {team_name} not found in {week_stats_file}")
+            return stats
+
+        stats_list = stats if isinstance(stats, list) else (list(stats.values()) if isinstance(stats, dict) else [])
+
+        # team_name's existing season-stats entry, used below to match its '_pg'
+        # naming convention for the renamed keys.
+        original_entry = next(
+            (entry for entry in stats_list if isinstance(entry, dict) and entry.get('team_name') == team_name),
+            None
+        )
+
+        # Rename 'team_match_*' keys to 'team_season_*' so process_team_stats() picks them up.
+        # If team_name's existing season-stats entry has a '_pg' (per game) suffixed
+        # version of this field (e.g. 'team_season_np_xg_pg' instead of
+        # 'team_season_np_xg'), use that suffixed name too, so the override lands on
+        # the same field name the rest of the app expects.
+        renamed_entry = {}
+        for key, value in team_week_entry.items():
+            if key.startswith('team_match'):
+                key = 'team_season' + key[len('team_match'):]
+            if original_entry is not None and f"{key}_pg" in original_entry:
+                key = f"{key}_pg"
+            renamed_entry[key] = value
+
+        updated_stats = []
+        replaced = False
+        for entry in stats_list:
+            if isinstance(entry, dict) and entry.get('team_name') == team_name:
+                updated_stats.append(renamed_entry)
+                replaced = True
+            else:
+                updated_stats.append(entry)
+
+        if not replaced:
+            print(f"[DataProvider] {team_name} not found in season stats list - appending week stats entry")
+            updated_stats.append(renamed_entry)
+
+        return updated_stats
 
     def _match_reference_name(self, name: str, candidate_names) -> str:
         """
@@ -885,17 +1090,91 @@ class DataProvider:
 
         return None
 
-    def get_team_stats_sk(self, competition_id: int, season_id: int) -> Dict:
+    def _apply_match_team_stats_override_sk(self, sections: Dict, section_keys: Dict, skillcorner_root: Path,
+                                             competition_id: int, season_id: int,
+                                             team_name: str, home_name: str, away_name: str) -> Dict:
+        """
+        Replace team_name's season-level entry in each section of `sections` with its
+        match-level stats for the home_name vs away_name match, read from the
+        *_teams_match_physical.json file.
+        """
+        match_filename = f"competition_{competition_id}_season_{season_id}_teams_match_physical.json"
+        match_stats_file = skillcorner_root / match_filename
+
+        match_sections = {}
+        if match_stats_file.exists():
+            try:
+                with open(match_stats_file, 'r', encoding='utf-8') as f:
+                    match_sections = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[DataProvider] Error loading SkillCorner match stats file {match_stats_file}: {e}")
+        else:
+            print(f"[DataProvider] SkillCorner match stats file not found: {match_stats_file}")
+
+        for section_key in section_keys.values():
+            section_stats = sections.get(section_key)
+            match_section_stats = match_sections.get(section_key)
+            if not section_stats or not match_section_stats:
+                continue
+
+            section_list = section_stats if isinstance(section_stats, list) else list(section_stats.values())
+            match_list = match_section_stats if isinstance(match_section_stats, list) else list(match_section_stats.values())
+
+            sk_team_names = {
+                entry.get('team_name') for entry in section_list
+                if isinstance(entry, dict) and entry.get('team_name')
+            }
+
+            team_name_sk = self._match_reference_name(team_name, sk_team_names)
+            home_name_sk = self._match_reference_name(home_name, sk_team_names)
+            away_name_sk = self._match_reference_name(away_name, sk_team_names)
+
+            if team_name_sk is None or home_name_sk is None or away_name_sk is None:
+                print(f"[DataProvider] Could not match team names for SkillCorner match override "
+                      f"(team={team_name}, home={home_name}, away={away_name}, section={section_key})")
+                continue
+
+            match_name_sk = f"{home_name_sk} v {away_name_sk}"
+
+            match_entry = next(
+                (entry for entry in match_list
+                 if isinstance(entry, dict) and entry.get('team_name') == team_name_sk
+                 and entry.get('match_name') == match_name_sk),
+                None
+            )
+
+            if match_entry is None:
+                print(f"[DataProvider] No match-level SkillCorner stats found for "
+                      f"'{team_name_sk}' in match '{match_name_sk}' (section={section_key})")
+                continue
+
+            sections[section_key] = [
+                match_entry if isinstance(entry, dict) and entry.get('team_name') == team_name_sk else entry
+                for entry in section_list
+            ]
+
+        return sections
+
+    def get_team_stats_sk(self, competition_id: int, season_id: int, team_name: str = None,
+                           home_name: str = None, away_name: str = None) -> Dict:
         """
         Load SkillCorner physical statistics for all teams in a competition and season.
 
         Args:
             competition_id: StatsBomb competition ID (e.g., 5)
             season_id: StatsBomb season ID (e.g., 351)
+            team_name: Optional StatsBomb team name. When given together with
+                home_name and away_name, team_name's season-level entry in each
+                section is replaced with its match-level stats for that match
+                (from the *_teams_match_physical.json file).
+            home_name: Optional StatsBomb home team name for the match to pull
+                team_name's override stats from.
+            away_name: Optional StatsBomb away team name for the match to pull
+                team_name's override stats from.
 
         Returns:
             Dictionary keyed by physical data type, each holding the processed
-            result from process_team_stats_sk() for that file:
+            result from process_team_stats_sk() for that section:
             {
                 'physical_all': {...},
                 'physical_otip': {...},
@@ -904,37 +1183,46 @@ class DataProvider:
 
         Example:
             stats = provider.get_team_stats_sk(5, 351)
-            Returns: Dict built from the three
-            competition_5_season_351_teams_physical_{all,otip,tip}.json files
+            Returns: Dict built from the 'all'/'otip'/'tip' sections of
+            competition_5_season_351_teams_physical.json
         """
-        # Construct filenames: competition_5_season_351_teams_physical_all.json, etc.
-        file_keys = {
-            'physical_all': f"competition_{competition_id}_season_{season_id}_teams_physical_all.json",
-            'physical_otip': f"competition_{competition_id}_season_{season_id}_teams_physical_otip.json",
-            'physical_tip': f"competition_{competition_id}_season_{season_id}_teams_physical_tip.json",
-        }
+        # Construct filename: competition_5_season_351_teams_physical.json
+        filename = f"competition_{competition_id}_season_{season_id}_teams_physical.json"
 
         # Search in data_temp/skillcorner folder
         skillcorner_root = self.data_root.parent / 'skillcorner'
+        stats_file = skillcorner_root / filename
+
+        print(f"[DataProvider] Looking for SkillCorner stats file: {stats_file}")
+
+        sections = {}
+        if stats_file.exists():
+            try:
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    sections = json.load(f)
+                    print(f"[DataProvider] ✓ Loaded SkillCorner stats from {stats_file}")
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[DataProvider] Error loading SkillCorner stats file {stats_file}: {e}")
+        else:
+            print(f"[DataProvider] SkillCorner stats file not found: {stats_file}")
+
+        # Map each result key to its section within the merged file
+        section_keys = {
+            'physical_all': 'all',
+            'physical_otip': 'otip',
+            'physical_tip': 'tip',
+        }
+
+        if team_name and home_name and away_name:
+            sections = self._apply_match_team_stats_override_sk(
+                sections, section_keys, skillcorner_root, competition_id, season_id,
+                team_name, home_name, away_name
+            )
 
         results = {}
-        for key, filename in file_keys.items():
-            stats_file = skillcorner_root / filename
-
-            print(f"[DataProvider] Looking for SkillCorner stats file: {stats_file}")
-
-            if stats_file.exists():
-                try:
-                    with open(stats_file, 'r', encoding='utf-8') as f:
-                        stats = json.load(f)
-                        print(f"[DataProvider] ✓ Loaded SkillCorner stats from {stats_file}")
-                        results[key] = self.process_team_stats_sk(stats)
-                except (json.JSONDecodeError, IOError) as e:
-                    print(f"[DataProvider] Error loading SkillCorner stats file {stats_file}: {e}")
-                    results[key] = {}
-            else:
-                print(f"[DataProvider] SkillCorner stats file not found: {stats_file}")
-                results[key] = {}
+        for result_key, section_key in section_keys.items():
+            section_stats = sections.get(section_key)
+            results[result_key] = self.process_team_stats_sk(section_stats) if section_stats else {}
 
         # Remap SkillCorner team names onto StatsBomb team names (e.g. "Crawley Town FC" -> "Crawley Town")
         # so callers can look up results by the StatsBomb team_name used everywhere else in the report.
@@ -951,17 +1239,27 @@ class DataProvider:
 
         return results
 
-    def get_player_stats_sk(self, competition_id: int, season_id: int, player_id: int) -> Dict:
+    def get_player_stats_sk(self, competition_id: int, season_id: int, player_id: int, team_name: str = None,
+                             home_name: str = None, away_name: str = None) -> Dict:
         """
         Load SkillCorner physical statistics for all players in a competition and season.
 
         Args:
             competition_id: StatsBomb competition ID (e.g., 5)
             season_id: StatsBomb season ID (e.g., 351)
+            player_id: StatsBomb player ID
+            team_name: Optional StatsBomb team name for player_id. When given
+                together with home_name and away_name, player_id's season-level
+                entry in each section is replaced with their match-level stats
+                for that match (from the *_player_match_physical.json file).
+            home_name: Optional StatsBomb home team name for the match to pull
+                player_id's override stats from.
+            away_name: Optional StatsBomb away team name for the match to pull
+                player_id's override stats from.
 
         Returns:
             Dictionary keyed by physical data type, each holding the processed
-            result from process_player_stats_sk() for that file:
+            result from process_player_stats_sk() for that section:
             {
                 'physical_all': {...},
                 'physical_otip': {...},
@@ -972,43 +1270,192 @@ class DataProvider:
 
         Example:
             stats = provider.get_player_stats_sk(5, 351)
-            Returns: Dict built from the five
-            competition_5_season_351_player_physical_{tip,otip,h1,h2,all}.json files
+            Returns: Dict built from the 'tip'/'otip'/'h1'/'h2'/'all' sections of
+            competition_5_season_351_player_physical.json
         """
-        # Construct filenames: competition_5_season_351_player_physical_tip.json, etc.
-        file_keys = {
-            'player_tip': f"competition_{competition_id}_season_{season_id}_player_physical_tip.json",
-            'player_otip': f"competition_{competition_id}_season_{season_id}_player_physical_otip.json",
-            'player_h1': f"competition_{competition_id}_season_{season_id}_player_physical_h1.json",
-            'player_h2': f"competition_{competition_id}_season_{season_id}_player_physical_h2.json",
-            'player_all': f"competition_{competition_id}_season_{season_id}_player_physical_all.json",
-        }
+        # Construct filename: competition_5_season_351_player_physical.json
+        filename = f"competition_{competition_id}_season_{season_id}_player_physical.json"
 
         # Search in data_temp/skillcorner folder
         skillcorner_root = self.data_root.parent / 'skillcorner'
+        stats_file = skillcorner_root / filename
+
+        print(f"[DataProvider] Looking for SkillCorner stats file: {stats_file}")
+
+        sections = {}
+        if stats_file.exists():
+            try:
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    sections = json.load(f)
+                    print(f"[DataProvider] ✓ Loaded SkillCorner stats from {stats_file}")
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[DataProvider] Error loading SkillCorner stats file {stats_file}: {e}")
+        else:
+            print(f"[DataProvider] SkillCorner stats file not found: {stats_file}")
+
+        # Map each result key to its section within the merged file
+        section_keys = {
+            'player_tip': 'tip',
+            'player_otip': 'otip',
+            'player_h1': 'h1',
+            'player_h2': 'h2',
+            'player_all': 'all',
+        }
+
+        if team_name and home_name and away_name:
+            sections = self._apply_match_player_stats_override_sk(
+                sections, section_keys, skillcorner_root, competition_id, season_id,
+                player_id, team_name, home_name, away_name
+            )
 
         results = {}
-        for key, filename in file_keys.items():
-            stats_file = skillcorner_root / filename
-
-            print(f"[DataProvider] Looking for SkillCorner stats file: {stats_file}")
-
-            if stats_file.exists():
-                try:
-                    with open(stats_file, 'r', encoding='utf-8') as f:
-                        stats = json.load(f)
-                        print(f"[DataProvider] ✓ Loaded SkillCorner stats from {stats_file}")
-                        results[key] = self.process_player_stats_sk(stats, competition_id, season_id, player_id)
-                except (json.JSONDecodeError, IOError) as e:
-                    print(f"[DataProvider] Error loading SkillCorner stats file {stats_file}: {e}")
-                    results[key] = {}
-            else:
-                print(f"[DataProvider] SkillCorner stats file not found: {stats_file}")
-                results[key] = {}
+        for result_key, section_key in section_keys.items():
+            section_stats = sections.get(section_key)
+            results[result_key] = self.process_player_stats_sk(section_stats, competition_id, season_id, player_id) if section_stats else {}
 
         return results
 
-    def get_player_stats(self, competition_id: int, season_id: int, player_id: int) -> Dict:
+    def _get_statsbomb_player_name(self, competition_id: int, season_id: int, player_id: int) -> str:
+        """Look up a StatsBomb player's name by player_id from competition_{id}_season_{id}_player_stats.json."""
+        filename = f"competition_{competition_id}_season_{season_id}_player_stats.json"
+        stats_file = self.data_root.parent / filename
+
+        if not stats_file.exists():
+            return None
+
+        try:
+            with open(stats_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return None
+
+        stats_list = data if isinstance(data, list) else (list(data.values()) if isinstance(data, dict) else [])
+        for entry in stats_list:
+            if isinstance(entry, dict) and entry.get('player_id') == player_id:
+                return entry.get('player_name')
+        return None
+
+    def _find_sk_player_name(self, sb_name: str, candidate_names) -> str:
+        """
+        Match a StatsBomb player name to a SkillCorner player name among `candidate_names`,
+        honoring the manual name-override file first - same approach as
+        process_player_stats_sk()'s find_sk_match().
+        """
+        name_overrides = self._load_name_overrides()
+        override_name = name_overrides.get(sb_name)
+        candidates_to_try = [sb_name] + ([override_name] if override_name else [])
+
+        for candidate in candidates_to_try:
+            matched = self._match_reference_name(candidate, candidate_names)
+            if matched:
+                return matched
+        return None
+
+    def _apply_match_player_stats_override_sk(self, sections: Dict, section_keys: Dict, skillcorner_root: Path,
+                                                competition_id: int, season_id: int, player_id: int,
+                                                team_name: str, home_name: str, away_name: str) -> Dict:
+        """
+        Replace player_id's season-level entry in each section of `sections` with its
+        match-level stats for the home_name vs away_name match, read from the
+        *_player_match_physical.json file.
+
+        Some season-level metric names end in '_top5' or '_top3' (e.g. 'psv99_top5',
+        'peak_velocity_top3'); the match-level data holds the same metric without that
+        suffix (e.g. 'psv99', 'peak_velocity'). The suffix is restored on the
+        overridden entry's keys so downstream code keeps using the original,
+        season-style metric names.
+        """
+        match_filename = f"competition_{competition_id}_season_{season_id}_player_match_physical.json"
+        match_stats_file = skillcorner_root / match_filename
+
+        match_sections = {}
+        if match_stats_file.exists():
+            try:
+                with open(match_stats_file, 'r', encoding='utf-8') as f:
+                    match_sections = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[DataProvider] Error loading SkillCorner player match stats file {match_stats_file}: {e}")
+        else:
+            print(f"[DataProvider] SkillCorner player match stats file not found: {match_stats_file}")
+
+        sb_player_name = self._get_statsbomb_player_name(competition_id, season_id, player_id)
+        if sb_player_name is None:
+            print(f"[DataProvider] Could not find StatsBomb player name for player_id {player_id}")
+            return sections
+
+        skip_fields = {'player_id', 'player_name', 'player_short_name', 'player_birthdate'}
+
+        for section_key in section_keys.values():
+            section_stats = sections.get(section_key)
+            match_section_stats = match_sections.get(section_key)
+            if not section_stats or not match_section_stats:
+                continue
+
+            section_list = section_stats if isinstance(section_stats, list) else list(section_stats.values())
+            match_list = match_section_stats if isinstance(match_section_stats, list) else list(match_section_stats.values())
+
+            sk_player_names = {
+                entry.get('player_name') for entry in section_list
+                if isinstance(entry, dict) and entry.get('player_name')
+            }
+            player_name_sk = self._find_sk_player_name(sb_player_name, sk_player_names)
+            if player_name_sk is None:
+                print(f"[DataProvider] Could not match SkillCorner player for '{sb_player_name}' (section={section_key})")
+                continue
+
+            original_entry = next(
+                (entry for entry in section_list
+                 if isinstance(entry, dict) and entry.get('player_name') == player_name_sk),
+                None
+            )
+            if original_entry is None:
+                continue
+
+            sk_team_names = {
+                entry.get('team_name') for entry in match_list
+                if isinstance(entry, dict) and entry.get('team_name')
+            }
+            team_name_sk = self._match_reference_name(team_name, sk_team_names)
+            home_name_sk = self._match_reference_name(home_name, sk_team_names)
+            away_name_sk = self._match_reference_name(away_name, sk_team_names)
+
+            if team_name_sk is None or home_name_sk is None or away_name_sk is None:
+                print(f"[DataProvider] Could not match team names for SkillCorner player match override "
+                      f"(team={team_name}, home={home_name}, away={away_name}, section={section_key})")
+                continue
+
+            match_name_sk = f"{home_name_sk} v {away_name_sk}"
+
+            match_entry = next(
+                (entry for entry in match_list
+                 if isinstance(entry, dict) and entry.get('player_name') == player_name_sk
+                 and entry.get('team_name') == team_name_sk
+                 and entry.get('match_name') == match_name_sk),
+                None
+            )
+
+            if match_entry is None:
+                print(f"[DataProvider] No match-level SkillCorner stats found for "
+                      f"'{player_name_sk}' in match '{match_name_sk}' (section={section_key})")
+                continue
+
+            renamed_entry = {}
+            for key, value in original_entry.items():
+                if key in skip_fields:
+                    renamed_entry[key] = value
+                    continue
+                base_key = key[:-len('_top5')] if key.endswith('_top5') or key.endswith('_top3') else key
+                renamed_entry[key] = match_entry.get(base_key, 0)
+
+            sections[section_key] = [
+                renamed_entry if isinstance(entry, dict) and entry.get('player_name') == player_name_sk else entry
+                for entry in section_list
+            ]
+
+        return sections
+
+    def get_player_stats(self, competition_id: int, season_id: int, player_id: int,
+                          team_name: str = None, week_no: int = None) -> Dict:
         """
         Load aggregated player statistics for a competition and season.
 
@@ -1016,6 +1463,11 @@ class DataProvider:
             competition_id: StatsBomb competition ID (e.g., 5)
             season_id: StatsBomb season ID (e.g., 351)
             player_id: StatsBomb player ID (e.g., 12345)
+            team_name: Optional team name. Only takes effect when week_no is also
+                    given: player_id's season metrics are overridden with their
+                    match-level stats for that week (see
+                    _load_week_player_match_stats / process_player_stats).
+            week_no: Optional week number. See team_name.
 
         Returns:
             Dictionary with aggregated player stats, or empty dict if not found.
@@ -1038,13 +1490,51 @@ class DataProvider:
                 with open(player_stats_file, 'r', encoding='utf-8') as f:
                     player_stats = json.load(f)
                     print(f"[DataProvider] ✓ Loaded player stats from {player_stats_file}")
-                    return self.process_player_stats(player_stats, player_id)
+
+                    match_stats = None
+                    if team_name is not None and week_no is not None:
+                        match_stats = self._load_week_player_match_stats(team_name, week_no, player_id)
+
+                    return self.process_player_stats(player_stats, player_id, match_stats=match_stats)
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[DataProvider] Error loading player stats file {player_stats_file}: {e}")
                 return {}
         else:
             print(f"[DataProvider] Player stats file not found: {player_stats_file}")
             return {}
+
+    def _load_week_player_match_stats(self, team_name: str, week_no: int, player_id: int) -> Dict:
+        """
+        Load player_id's match-level stats dict from Week{week_no}_..._player_stats.json
+        under team_name's season folder (e.g. Week10_Crawley Town_vs_Chesterfield_player_stats.json).
+
+        Returns the matching player's dict, or None if the file or player entry isn't found.
+        """
+        team_dir = self.data_root / team_name
+        week_stats_matches = sorted(team_dir.glob(f"*/Week{week_no}_*_player_stats.json"))
+
+        if not week_stats_matches:
+            print(f"[DataProvider] No player_stats.json found for {team_name}, week {week_no} under {team_dir}")
+            return None
+
+        week_stats_file = week_stats_matches[0]
+        print(f"[DataProvider] Loading week {week_no} player match stats from {week_stats_file}")
+
+        try:
+            with open(week_stats_file, 'r', encoding='utf-8') as f:
+                week_stats = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[DataProvider] Error loading week player stats file {week_stats_file}: {e}")
+            return None
+
+        week_stats_list = week_stats if isinstance(week_stats, list) else (
+            list(week_stats.values()) if isinstance(week_stats, dict) else []
+        )
+
+        return next(
+            (entry for entry in week_stats_list if isinstance(entry, dict) and entry.get('player_id') == player_id),
+            None
+        )
 
     def get_team_players(self, competition_id: int, season_id: int, team_name: str) -> List[int]:
         """

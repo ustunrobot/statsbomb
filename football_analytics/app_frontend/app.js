@@ -22,10 +22,12 @@ const appState = {
     competitions: [],
     teams: [],
     players: [],
+    weeks: [],
     selectedCompetition: null,
     selectedSeasonId: null,
     selectedTeam: null,
     selectedPlayer: null,
+    selectedWeek: null,
     reportType: 'opposition',
     currentTaskId: null,
     isGenerating: false,
@@ -40,6 +42,7 @@ const elements = {
     competitionSelect: document.getElementById('competitionSelect'),
     teamSelect: document.getElementById('teamSelect'),
     playerSelect: document.getElementById('playerSelect'),
+    weekSelect: document.getElementById('weekSelect'),
     reportTypeRadios: document.querySelectorAll('input[name="reportType"]'),
 
     // Buttons
@@ -125,9 +128,13 @@ function attachEventListeners() {
         const selectedValue = e.target.value;
         appState.selectedTeam = null;
         appState.selectedPlayer = null;
+        appState.selectedWeek = null;
 
         elements.teamSelect.value = '';
         elements.playerSelect.value = '';
+        elements.weekSelect.value = '';
+        appState.weeks = [];
+        updateWeekSelect();
 
         if (selectedValue) {
             // Parse competition data from JSON
@@ -150,7 +157,9 @@ function attachEventListeners() {
     elements.teamSelect.addEventListener('change', async (e) => {
         appState.selectedTeam = e.target.value;
         appState.selectedPlayer = null;
+        appState.selectedWeek = null;
         elements.playerSelect.value = '';
+        elements.weekSelect.value = '';
 
         console.log(`Team selected: ${appState.selectedTeam}`);
         console.log(`Current appState:`, {
@@ -166,9 +175,20 @@ function attachEventListeners() {
                 return;
             }
             await loadPlayers(appState.selectedTeam, appState.selectedCompetition, appState.selectedSeasonId);
+
+            const team = appState.teams.find(t => t.id === parseInt(appState.selectedTeam));
+            const competition = elements.competitionSelect.value ? JSON.parse(elements.competitionSelect.value) : null;
+            if (team && competition && competition.season) {
+                await loadWeeks(team.name, competition.season);
+            } else {
+                appState.weeks = [];
+                updateWeekSelect();
+            }
         } else {
             appState.players = [];
             updatePlayerSelect();
+            appState.weeks = [];
+            updateWeekSelect();
         }
 
         updateGenerateButton();
@@ -177,6 +197,12 @@ function attachEventListeners() {
     // Player selection
     elements.playerSelect.addEventListener('change', (e) => {
         appState.selectedPlayer = e.target.value;
+        updateGenerateButton();
+    });
+
+    // Week selection
+    elements.weekSelect.addEventListener('change', (e) => {
+        appState.selectedWeek = e.target.value;
         updateGenerateButton();
     });
 
@@ -472,6 +498,30 @@ async function loadPlayers(teamId, competitionId, seasonId) {
     }
 }
 
+async function loadWeeks(teamName, seasonName) {
+    try {
+        console.log(`Loading weeks for team ${teamName} (season: ${seasonName})...`);
+
+        const endpoint = `/weeks?team_name=${encodeURIComponent(teamName)}&season_name=${encodeURIComponent(seasonName)}`;
+        console.log(`API Endpoint: ${endpoint}`);
+        const response = await apiCall(endpoint);
+
+        if (response.status === 'success') {
+            appState.weeks = response.data || [];
+            console.log(`✓ Loaded ${appState.weeks.length} weeks`);
+            updateWeekSelect();
+        } else {
+            throw new Error(response.message || 'Failed to load weeks');
+        }
+    } catch (error) {
+        // Non-fatal: the week filter is optional and the team's match data may
+        // not be downloaded yet, so don't block the rest of the UI over this.
+        console.error('Error loading weeks:', error);
+        appState.weeks = [];
+        updateWeekSelect();
+    }
+}
+
 // ============================================================================
 // UI Update Functions
 // ============================================================================
@@ -518,6 +568,20 @@ function updatePlayerSelect() {
         option.value = player.id;
         option.textContent = player.name;
         elements.playerSelect.appendChild(option);
+    });
+}
+
+function updateWeekSelect() {
+    const isDisabled = appState.weeks.length === 0;
+
+    elements.weekSelect.disabled = isDisabled;
+    elements.weekSelect.innerHTML = '<option value="">-- All Weeks --</option>';
+
+    appState.weeks.forEach(week => {
+        const option = document.createElement('option');
+        option.value = week.week_no;
+        option.textContent = week.match_name;
+        elements.weekSelect.appendChild(option);
     });
 }
 
@@ -579,7 +643,8 @@ async function generateReport() {
                 team_id: parseInt(appState.selectedTeam),
                 team_name: team.name,
                 season_name: competition.season,
-                league_name: competition.league
+                league_name: competition.league,
+                week_no: appState.selectedWeek ? parseInt(appState.selectedWeek) : null,
             };
 
             console.log(`Sending opposition report request:`, requestBody);
@@ -622,6 +687,7 @@ async function generateReport() {
                 league_name: competition.league,
                 report_type: "player",
                 player_id: appState.selectedPlayer ? parseInt(appState.selectedPlayer) : null,
+                week_no: appState.selectedWeek ? parseInt(appState.selectedWeek) : null,
             };
 
             console.log(`Sending player stats report request:`, requestBody);

@@ -56,37 +56,60 @@ def fetch_skillcorner_physical_data(competition_id, competition_name, season_id,
     data_temp_dir = Path(__file__).parent.parent / 'data_temp' / 'skillcorner'
     data_temp_dir.mkdir(parents=True, exist_ok=True)
 
+    team_physical_data = {}
+    player_physical_data = {}
+    team_match_physical_data = {}
+    player_match_physical_data = {}
+
     for possess in ["all", "tip", "otip"]:
 
         if possess == "all":
             team_data = client.get_physical(params={**common_params_p90, 'possession': possess, 'group_by': 'team'})
         else:
             team_data = client.get_physical(params={**common_params, 'possession': possess, 'group_by': 'team'})
-        fname = f"competition_{competition_id}_season_{season_id}_teams_physical_{possess}.json"
-        with open(data_temp_dir / fname, 'w') as f:
-            json.dump(team_data, f, indent=2)
+        team_physical_data[possess] = team_data
 
         if possess == "all":
             player_data = client.get_physical(params={**common_params_p90, 'possession': possess, 'group_by': 'player'})
         else:
             player_data = client.get_physical(params={**common_params, 'possession': possess, 'group_by': 'player'})
-        
-        fname = f"competition_{competition_id}_season_{season_id}_player_physical_{possess}.json"
-        with open(data_temp_dir / fname, 'w') as f:
-            json.dump(player_data, f, indent=2)
+        player_physical_data[possess] = player_data
 
         if possess == "all":
+            player_physical_data['h1'] = client.get_physical(params={**common_params, 'period': 'h1', 'group_by': 'player'})
+            player_physical_data['h2'] = client.get_physical(params={**common_params, 'period': 'h2', 'group_by': 'player'})
 
-            player_data = client.get_physical(params={**common_params, 'period': 'h1', 'group_by': 'player'})
-            fname = f"competition_{competition_id}_season_{season_id}_player_physical_h1.json"
-            with open(data_temp_dir / fname, 'w') as f:
-                json.dump(player_data, f, indent=2)
+        if possess == "all":
+            team_match_data = client.get_physical(params={**common_params_p90, 'possession': possess, 'group_by': 'team,match'})
+        else:
+            team_match_data = client.get_physical(params={**common_params, 'possession': possess, 'group_by': 'team,match'})
+        team_match_physical_data[possess] = team_match_data
 
-            player_data = client.get_physical(params={**common_params, 'period': 'h2', 'group_by': 'player'})
-            fname = f"competition_{competition_id}_season_{season_id}_player_physical_h2.json"
-            with open(data_temp_dir / fname, 'w') as f:
-                json.dump(player_data, f, indent=2)
+        if possess == "all":
+            player_match_data = client.get_physical(params={**common_params_p90, 'possession': possess, 'group_by': 'player,match'})
+        else:
+            player_match_data = client.get_physical(params={**common_params, 'possession': possess, 'group_by': 'player,match'})
+        player_match_physical_data[possess] = player_match_data
 
+        if possess == "all":
+            player_match_physical_data['h1'] = client.get_physical(params={**common_params, 'period': 'h1', 'group_by': 'player,match'})
+            player_match_physical_data['h2'] = client.get_physical(params={**common_params, 'period': 'h2', 'group_by': 'player,match'})
+
+    team_fname = f"competition_{competition_id}_season_{season_id}_teams_physical.json"
+    with open(data_temp_dir / team_fname, 'w') as f:
+        json.dump(team_physical_data, f, indent=2)
+
+    player_fname = f"competition_{competition_id}_season_{season_id}_player_physical.json"
+    with open(data_temp_dir / player_fname, 'w') as f:
+        json.dump(player_physical_data, f, indent=2)
+
+    team_match_fname = f"competition_{competition_id}_season_{season_id}_teams_match_physical.json"
+    with open(data_temp_dir / team_match_fname, 'w') as f:
+        json.dump(team_match_physical_data, f, indent=2)
+
+    player_match_fname = f"competition_{competition_id}_season_{season_id}_player_match_physical.json"
+    with open(data_temp_dir / player_match_fname, 'w') as f:
+        json.dump(player_match_physical_data, f, indent=2)
 
     print(f"Saved to {data_temp_dir}")
     # return team_data, player_data
