@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Intelligence - Log In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <div class="logo">
+                <span class="logo-icon">FI</span>
+                <h1>Football Intelligence</h1>
+            </div>
+            <p class="login-subtitle">Sign in to continue</p>
+
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" class="input-select" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="input-select" autocomplete="current-password" required>
+                </div>
+                <div id="loginError" class="login-error" style="display: none;"></div>
+                <button type="submit" id="loginBtn" class="btn btn-primary login-submit">Log In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Conflict dialog: shown when another user already holds the active session -->
+    <div id="conflictOverlay" class="conflict-overlay" style="display: none;">
+        <div class="conflict-dialog">
+            <h3>Someone else is using the app</h3>
+            <p id="conflictMessage"></p>
+            <div class="conflict-actions">
+                <button id="conflictWaitBtn" class="btn btn-secondary">Wait, I'll come back later</button>
+                <button id="conflictForceBtn" class="btn btn-danger">Force them to log out</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorBox = document.getElementById('loginError');
+        const subtitle = document.querySelector('.login-subtitle');
+        const conflictOverlay = document.getElementById('conflictOverlay');
+        const conflictMessage = document.getElementById('conflictMessage');
+        const conflictWaitBtn = document.getElementById('conflictWaitBtn');
+        const conflictForceBtn = document.getElementById('conflictForceBtn');
+
+        // Set once checkExistingSession() finds a valid, already-logged-in cookie -
+        // in that case we skip asking for a password and go straight to claiming
+        // the active slot (via /api/auth/claim instead of /api/auth/login).
+        let alreadyAuthenticated = false;
+
+        function formatLastSeen(lastSeenEpoch) {
+            const seconds = Math.max(0, Math.round(Date.now() / 1000 - lastSeenEpoch));
+            if (seconds < 60) return `${seconds}s ago`;
+            return `${Math.round(seconds / 60)}m ago`;
+        }
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        }
+
+        function showConflict(activeUser, lastSeen, canForce) {
+            conflictMessage.textContent = `"${activeUser}" is currently connected (last active ${formatLastSeen(lastSeen)}).`;
+            conflictForceBtn.style.display = canForce ? '' : 'none';
+            if (!canForce) {
+                conflictMessage.textContent += ' This session cannot be forced to log out.';
+            }
+            conflictOverlay.style.display = 'flex';
+        }
+
+        async function attemptClaim(force) {
+            errorBox.style.display = 'none';
+            loginBtn.disabled = true;
+
+            try {
+                const url = alreadyAuthenticated ? '/api/auth/claim' : '/api/auth/login';
+                const body = alreadyAuthenticated
+                    ? { force }
+                    : {
+                        username: document.getElementById('username').value,
+                        password: document.getElementById('password').value,
+                        force,
+                    };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                if (response.status === 409) {
+                    showConflict(data.active_user, data.last_seen, data.can_force);
+                } else if (response.status === 401) {
+                    if (alreadyAuthenticated) {
+                        // Cookie turned out to be invalid/expired - fall back to the form.
+                        alreadyAuthenticated = false;
+                        form.style.display = '';
+                        subtitle.textContent = 'Sign in to continue';
+                    } else {
+                        showError('Incorrect username or password.');
+                    }
+                } else {
+                    showError(data.message || 'Login failed.');
+                }
+            } catch (err) {
+                showError('Could not reach the server. Please try again.');
+            } finally {
+                loginBtn.disabled = false;
+            }
+        }
+
+        async function checkExistingSession() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (res.ok) {
+                    alreadyAuthenticated = true;
+                    form.style.display = 'none';
+                    subtitle.textContent = 'Reconnecting...';
+                    attemptClaim(false);
+                }
+            } catch (err) {
+                // No existing session (or server unreachable) - show the login form as normal.
+            }
+        }
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            attemptClaim(false);
+        });
+
+        conflictWaitBtn.addEventListener('click', () => {
+            conflictOverlay.style.display = 'none';
+        });
+
+        conflictForceBtn.addEventListener('click', () => {
+            conflictOverlay.style.display = 'none';
+            attemptClaim(true);
+        });
+
+        checkExistingSession();
+    </script>
+</body>
+</html>

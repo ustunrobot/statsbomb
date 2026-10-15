@@ -31,6 +31,8 @@ const appState = {
     reportType: 'opposition',
     currentTaskId: null,
     isGenerating: false,
+    currentUser: null,
+    isAdmin: false,
 };
 
 // ============================================================================
@@ -84,14 +86,154 @@ const elements = {
 
     // Initial load
     initialLoadSpinner: document.getElementById('initialLoadSpinner'),
+
+    // Auth / session
+    logoutBtn: document.getElementById('logoutBtn'),
+    sessionConflictOverlay: document.getElementById('sessionConflictOverlay'),
+    sessionConflictMessage: document.getElementById('sessionConflictMessage'),
+    sessionConflictWaitBtn: document.getElementById('sessionConflictWaitBtn'),
+    sessionConflictForceBtn: document.getElementById('sessionConflictForceBtn'),
 };
+
+// ============================================================================
+// Auth / single-active-session handling
+// ============================================================================
+
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+let heartbeatTimer = null;
+
+function formatLastSeen(lastSeenEpoch) {
+    const seconds = Math.max(0, Math.round(Date.now() / 1000 - lastSeenEpoch));
+    if (seconds < 60) return `${seconds}s ago`;
+    return `${Math.round(seconds / 60)}m ago`;
+}
+
+function showSessionConflict(activeUser, lastSeen, canForce) {
+    stopHeartbeat();
+    let message = `"${activeUser}" is currently connected (last active ${formatLastSeen(lastSeen)}).`;
+    if (!canForce) {
+        message += ' This session cannot be forced to log out.';
+    }
+    elements.sessionConflictMessage.textContent = message;
+    elements.sessionConflictForceBtn.style.display = canForce ? '' : 'none';
+    elements.sessionConflictOverlay.style.display = 'flex';
+}
+
+function hideSessionConflict() {
+    elements.sessionConflictOverlay.style.display = 'none';
+}
+
+/** Fetch who's logged in and apply admin-only UI restrictions (e.g. Download Full Season). */
+async function loadCurrentUser() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`);
+        if (!response.ok) return;
+        const data = await response.json();
+        appState.currentUser = data.user;
+        appState.isAdmin = data.user === 'admin';
+    } catch (err) {
+        console.error('Failed to load current user:', err);
+    } finally {
+        // Full season download touches every team's data at once - admin only.
+        elements.downloadFullSeasonBtn.style.display = appState.isAdmin ? '' : 'none';
+    }
+}
+
+/** Try to acquire (or refresh) the single active session slot. Returns true on success. */
+async function claimSession(force) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: !!force }),
+        });
+
+        if (response.ok) {
+            hideSessionConflict();
+            return true;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+            window.location.href = '/login';
+        } else if (response.status === 409) {
+            showSessionConflict(data.active_user, data.last_seen, data.can_force);
+        }
+        return false;
+    } catch (err) {
+        console.error('Failed to claim session:', err);
+        return false;
+    }
+}
+
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatTimer = setInterval(async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/heartbeat`, { method: 'POST' });
+            if (response.status === 401) {
+                window.location.href = '/login';
+            } else if (response.status === 409) {
+                const data = await response.json().catch(() => ({}));
+                showSessionConflict(data.active_user, data.last_seen, data.can_force);
+            }
+        } catch (err) {
+            console.error('Heartbeat failed:', err);
+        }
+    }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+function attachAuthEventListeners() {
+    elements.logoutBtn.addEventListener('click', async () => {
+        stopHeartbeat();
+        try {
+            await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+        } finally {
+            window.location.href = '/login';
+        }
+    });
+
+    elements.sessionConflictWaitBtn.addEventListener('click', () => {
+        window.location.href = '/login';
+    });
+
+    elements.sessionConflictForceBtn.addEventListener('click', async () => {
+        hideSessionConflict();
+        const claimed = await claimSession(true);
+        if (claimed) {
+            await loadCurrentUser();
+            startHeartbeat();
+            if (!appState.competitions.length) {
+                await initializeApp();
+            }
+        }
+    });
+}
 
 // ============================================================================
 // Initialization
 // ============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('Football Intelligence App Initializing...');
+    attachAuthEventListeners();
+
+    const claimed = await claimSession(false);
+    if (!claimed) {
+        // Conflict dialog (or redirect to /login) is already showing - initialization
+        // resumes from the "Force them to log out" button if the user chooses that.
+        return;
+    }
+
+    await loadCurrentUser();
+    startHeartbeat();
     initializeApp();
 });
 

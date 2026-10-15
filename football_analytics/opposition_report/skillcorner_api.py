@@ -1,12 +1,22 @@
 import argparse
 import json
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from skillcorner.client import SkillcornerClient
+
+# Loads app_backend/.env explicitly (rather than relying on load_dotenv()'s
+# default cwd-upward search), so this works both when imported by the Flask
+# app and when run as a standalone CLI script from any directory.
+load_dotenv(Path(__file__).parent.parent / 'app_backend' / '.env')
 
 def fetch_skillcorner_physical_data(competition_id, competition_name, season_id, season_name):
     """Fetch and save SkillCorner team- and player-level physical data for one competition/season."""
-    client = SkillcornerClient(username='conor.mcgaharan@crawleytownfc.com', password='JenniferH0n3y10')
+    client = SkillcornerClient(
+        username=os.getenv('SKILLCORNER_USERNAME'),
+        password=os.getenv('SKILLCORNER_PASSWORD'),
+    )
 
     sc_season_id = None
     seasons = client.get_seasons()

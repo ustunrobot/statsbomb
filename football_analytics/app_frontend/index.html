@@ -19,8 +19,21 @@
                     <h1>Football Intelligence</h1>
                 </div>
                 <p class="subtitle">Opposition &amp; Player Report Generator</p>
+                <button id="logoutBtn" class="btn btn-secondary header-logout-btn">Log Out</button>
             </div>
         </header>
+
+        <!-- Shown when another logged-in session holds (or takes over) the single active slot -->
+        <div id="sessionConflictOverlay" class="conflict-overlay" style="display: none;">
+            <div class="conflict-dialog">
+                <h3 id="sessionConflictTitle">Someone else is using the app</h3>
+                <p id="sessionConflictMessage"></p>
+                <div class="conflict-actions">
+                    <button id="sessionConflictWaitBtn" class="btn btn-secondary">Wait, I'll come back later</button>
+                    <button id="sessionConflictForceBtn" class="btn btn-danger">Force them to log out</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">

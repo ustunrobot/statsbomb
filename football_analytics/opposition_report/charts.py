@@ -26,11 +26,17 @@ def reverse_metric_if_needed(metric):
     # Reverse percentile_order: rank 1/24 becomes 24/24
     reversed_percentile_order = metric.percentile_total + 1 - metric.percentile_order
 
+    # Reverse secondary_z_score the same way as z_score, if present
+    reversed_secondary_z_score = metric.secondary_z_score
+    if reversed_secondary_z_score is not None:
+        reversed_secondary_z_score = -reversed_secondary_z_score if reversed_secondary_z_score != 0 else 0.0
+
     # Return a new Metric with reversed values
     return replace(
         metric,
         z_score=reversed_z_score,
-        percentile_order=reversed_percentile_order
+        percentile_order=reversed_percentile_order,
+        secondary_z_score=reversed_secondary_z_score
     )
 
 
@@ -494,6 +500,20 @@ def create_radar_chart(metrics: dict, default_size: int = 320) -> str:
     for i in range(metric_count):
         x, y = calculate_point(i, max_radius)
         svg += f'        <line x1="{center_x}" y1="{center_y}" x2="{x}" y2="{y}" stroke="#e5e5e5" stroke-width="1"/>\n'
+
+    # Collect points for the secondary (comparison) polygon, using secondary_z_score
+    # where available - falling back to the same z_score otherwise - and draw it
+    # first so the primary polygon renders on top of it.
+    secondary_points = []
+    for i, (metric_name, metric) in enumerate(metrics.items()):
+        metric = reverse_metric_if_needed(metric)
+        secondary_z = metric.secondary_z_score if metric.secondary_z_score is not None else metric.z_score
+        radius = zscore_to_radius(secondary_z)
+        x, y = calculate_point(i, radius)
+        secondary_points.append(f"{x},{y}")
+
+    secondary_points_str = " ".join(secondary_points)
+    svg += f'        <polygon points="{secondary_points_str}" fill="#999999" fill-opacity="0.2" stroke="#8e44ad" stroke-width="1.5" stroke-dasharray="4,2"/>\n'
 
     # Collect points for the polygon
     points = []
@@ -1061,6 +1081,16 @@ def render_metric_cards(metrics_dict: dict, color_mapping: dict = None) -> str:
         bar_width = abs(bar_end_position - bar_start)
         bar_left = min(bar_start, bar_end_position)
 
+        secondary_tick_html = ""
+        if metric.secondary_z_score is not None:
+            secondary_position = ((metric.secondary_z_score + 2) / 4) * 100
+            secondary_position = max(0, min(100, secondary_position))
+            secondary_tick_html = (
+                f'<div style="position: absolute; left: {secondary_position}%; top: 100%; '
+                f'width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; '
+                f'border-bottom: 6px solid #8e44ad; transform: translateX(-50%);" title="Previous"></div>'
+            )
+
         # Color (card background/border and bar fill) by percentile rank (1 = best
         # after reversal above): bottom quartile-ish (rank >= 18/24) is red, top
         # quintile-ish (rank <= 5/24) is green, everything else is neutral gray.
@@ -1118,6 +1148,7 @@ def render_metric_cards(metrics_dict: dict, color_mapping: dict = None) -> str:
                     <div class="metric-card-bar-background">
                         <div class="metric-card-bar-center" style="position: absolute; left: 50%; top: -3px; width: 2px; height: 11px; background-color: #333333; transform: translateX(-50%);" title="Average"></div>
                         <div class="metric-card-bar-fill" style="left: {bar_left}%; width: {bar_width}%; background-color: {bar_color};"></div>
+                        {secondary_tick_html}
                     </div>
                 </div>
                 <div class="metric-card-bar-labels">

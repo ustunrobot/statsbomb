@@ -12,17 +12,20 @@ import json
 import logging
 import webbrowser
 import threading
+from datetime import timedelta
 from pathlib import Path
-from flask import Flask, render_template, jsonify, request, send_file, make_response
+from flask import Flask, render_template, jsonify, request, send_file, make_response, redirect, session
 from flask_cors import CORS
+from werkzeug.security import check_password_hash
 from dotenv import load_dotenv
 import statsbombpy.sb as sb
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (explicit path so this doesn't depend on the
+# process's current working directory matching this file's own directory)
+load_dotenv(Path(__file__).parent / '.env')
 
 # Configure logging
 logging.basicConfig(
@@ -36,11 +39,33 @@ from app_backend.statsbomb_service import get_service as get_statsbomb_service
 from utils.data_loader import get_season_stats, get_player_season_data, get_season_matches, get_team_data, fetch_events_with_360, fetch_player_match_stats, fetch_team_match_stats
 from opposition_report.skillcorner_api import fetch_skillcorner_physical_data
 from event_based.data_provider import DataProvider
+from app_backend import auth
 
 # Configuration
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 PORT = int(os.getenv('PORT', 5000))
 HOST = '127.0.0.1'  # Localhost only for security
+
+# StatsBomb API credentials (previously hardcoded - now read from app_backend/.env)
+STATSBOMB_CREDS = {
+    "user": os.getenv('STATSBOMB_USER'),
+    "passwd": os.getenv('STATSBOMB_PASSWORD'),
+}
+
+# Site login credentials (separate from the StatsBomb/SkillCorner API credentials
+# above - this is who's allowed to open the app at all). Each user is one line in
+# app_backend/.env: APP_USER_<NAME>_HASH=<password hash>, e.g. APP_USER_ERDEM_HASH=...
+# -> username "erdem". Any number of users can be added this way.
+def _load_app_users() -> dict:
+    prefix, suffix = 'APP_USER_', '_HASH'
+    users = {}
+    for key, value in os.environ.items():
+        if key.startswith(prefix) and key.endswith(suffix) and value:
+            username = key[len(prefix):-len(suffix)].lower()
+            users[username] = value
+    return users
+
+APP_USERS = _load_app_users()
 
 
 def get_persistent_data_dir() -> Path:
@@ -66,6 +91,14 @@ app = Flask(
     static_url_path=''
 )
 
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
+if not app.secret_key:
+    raise RuntimeError(
+        "FLASK_SECRET_KEY is not set. Add it to app_backend/.env "
+        "(generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\")"
+    )
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+
 logger.info(f"Frontend path: {frontend_path}")
 logger.info(f"Static folder: {app.static_folder}")
 logger.info(f"Template folder: {app.template_folder}")
@@ -75,6 +108,140 @@ CORS(app, origins=[f'http://{HOST}:{PORT}', 'http://localhost:5000'])
 
 # Initialize services
 statsbomb_service = get_statsbomb_service()
+
+# ============================================================================
+# AUTH: login + single-active-user slot (see app_backend/auth.py)
+# ============================================================================
+
+# Paths reachable without being logged in at all.
+_PUBLIC_PATH_PREFIXES = ('/api/auth/',)
+_PUBLIC_PATHS = {'/login', '/api/health'}
+_STATIC_SUFFIXES = ('.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2')
+
+
+@app.before_request
+def _enforce_auth():
+    path = request.path
+
+    if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PATH_PREFIXES):
+        return None
+    if path.startswith('/static/') or path.endswith(_STATIC_SUFFIXES):
+        return None
+
+    if not session.get('authenticated'):
+        if path.startswith('/api/'):
+            return jsonify({'status': 'error', 'message': 'authentication_required'}), 401
+        return redirect('/login')
+
+    # Logged in. API calls additionally require holding the single active
+    # slot - this doubles as a heartbeat for every active user's own requests.
+    if path.startswith('/api/'):
+        ok, holder = auth.try_claim(session['sid'], session['user'])
+        if not ok:
+            return jsonify({
+                'status': 'error',
+                'message': 'session_conflict',
+                'active_user': holder['user'],
+                'last_seen': holder['last_seen'],
+                'can_force': holder['can_force'],
+            }), 409
+    return None
+
+
+@app.route('/login')
+def login_page():
+    """Serve the login page (public)."""
+    return render_template('login.html')
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').lower()
+    password = data.get('password', '')
+    force = bool(data.get('force'))
+
+    if not APP_USERS:
+        logger.error("No APP_USER_<NAME>_HASH entries configured in app_backend/.env")
+        auth.log_login_attempt(username, success=False, reason='login_not_configured', ip=request.remote_addr)
+        return jsonify({'status': 'error', 'message': 'login_not_configured'}), 500
+
+    if username not in APP_USERS or not check_password_hash(APP_USERS[username], password):
+        auth.log_login_attempt(username, success=False, reason='invalid_credentials', ip=request.remote_addr)
+        return jsonify({'status': 'error', 'message': 'invalid_credentials'}), 401
+
+    auth.log_login_attempt(username, success=True, reason='ok', ip=request.remote_addr)
+
+    session.permanent = True
+    session['authenticated'] = True
+    session['user'] = username
+    session['sid'] = auth.new_sid()
+
+    ok, holder = auth.try_claim(session['sid'], session['user'], force=force)
+    if not ok:
+        return jsonify({
+            'status': 'conflict',
+            'active_user': holder['user'],
+            'last_seen': holder['last_seen'],
+            'can_force': holder['can_force'],
+        }), 409
+
+    return jsonify({'status': 'ok', 'user': username})
+
+
+@app.route('/api/auth/claim', methods=['POST'])
+def auth_claim():
+    """Attempt to (re)acquire the active slot for the current logged-in session."""
+    if not session.get('authenticated'):
+        return jsonify({'status': 'error', 'message': 'authentication_required'}), 401
+
+    force = bool((request.get_json(silent=True) or {}).get('force'))
+    ok, holder = auth.try_claim(session['sid'], session['user'], force=force)
+    if not ok:
+        return jsonify({
+            'status': 'conflict',
+            'active_user': holder['user'],
+            'last_seen': holder['last_seen'],
+            'can_force': holder['can_force'],
+        }), 409
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/auth/heartbeat', methods=['POST'])
+def auth_heartbeat():
+    if not session.get('authenticated'):
+        return jsonify({'status': 'error', 'message': 'authentication_required'}), 401
+
+    ok, holder = auth.try_claim(session['sid'], session['user'])
+    if not ok:
+        return jsonify({
+            'status': 'error',
+            'message': 'session_conflict',
+            'active_user': holder['user'],
+            'last_seen': holder['last_seen'],
+            'can_force': holder['can_force'],
+        }), 409
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    sid = session.get('sid')
+    if sid:
+        auth.release(sid)
+    session.clear()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def auth_me():
+    if not session.get('authenticated'):
+        return jsonify({'status': 'error', 'message': 'authentication_required'}), 401
+    return jsonify({
+        'status': 'ok',
+        'user': session['user'],
+        'holding_slot': auth.touch(session['sid']),
+    })
 
 # ============================================================================
 # ROUTES: Frontend
@@ -327,10 +494,7 @@ def generate_report():
         data_temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Get default credentials
-        creds = {
-            "user": "ustunrobot@gmail.com",
-            "passwd": "waQMIar2",
-        }
+        creds = STATSBOMB_CREDS
 
         # Generate both team and player season stats
         team_stats_filepath = get_season_stats(
@@ -560,6 +724,12 @@ def generate_team_events():
     Returns:
         Server-Sent Events stream with progress updates
     """
+    # This is the endpoint behind the "Download Full Season" button (which
+    # calls it once per team) - admin-only, since it pulls match data for
+    # every team in the competition at once.
+    if session.get('user') != 'admin':
+        return jsonify({'status': 'error', 'message': 'admin_only'}), 403
+
     # Extract parameters while still in request context
     if request.method == 'GET':
         competition_id = int(request.args.get('competition_id'))
@@ -585,10 +755,7 @@ def generate_team_events():
             data_temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Get credentials
-            creds = {
-                "user": "ustunrobot@gmail.com",
-                "passwd": "waQMIar2",
-            }
+            creds = STATSBOMB_CREDS
 
             # Get season name from competitions API
             import statsbombpy.sb as sb_service
@@ -713,10 +880,7 @@ def generate_week_events():
             data_temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Get credentials
-            creds = {
-                "user": "ustunrobot@gmail.com",
-                "passwd": "waQMIar2",
-            }
+            creds = STATSBOMB_CREDS
 
             # Get season name from competitions API
             import statsbombpy.sb as sb_service

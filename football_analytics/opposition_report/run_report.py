@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from opposition_report import section0, section1, section2, section3, section4, section5, section6, section7, section8, section9, section10, section11, section12, section13, section14, section15, section16, section17, section21, section_appendix, section1_landscape
 from event_based.data_provider import DataProvider
 from event_based.event_processor import EventProcessor
+from event_based.metrics import Metric
 
 def get_team_stats(competition_id: int, season_id: int, data_root: str = None, team_name: str = None, week_no: int = None) -> dict:
     """Process event data and return aggregates for the given team."""
@@ -55,14 +56,33 @@ def get_team_stats_sk(competition_id: int, season_id: int, data_root: str = None
 
     return provider.get_team_stats_sk(competition_id, season_id)
 
+def _find_team_aggregate(team_aggregates: dict, team_name: str) -> dict:
+    """Find a layer's aggregate dict for team_name among its team_id-keyed entries."""
+    return next(
+        (team_data for team_data in team_aggregates.values()
+         if isinstance(team_data, dict) and team_data.get('team_name') == team_name),
+        None
+    )
+
 def get_aggregates_for_team(season: str, data_root: str = None, team_name: str = None, week_no: int = None) -> dict:
-    """Process event data and return aggregates for the given team."""
+    """Process event data and return aggregates for the given team.
+
+    When both team_name and week_no are given, every KPI-layer metric for
+    team_name is computed from just that week's match (other teams' matches
+    are unaffected), and each such metric's original full-season z-score is
+    preserved on its secondary_z_score field - mirroring get_team_stats()'s
+    week-override behavior. Every match is loaded and run through
+    process_event_file() exactly once; the week filtering and the extra
+    aggregation pass needed to capture the original z-scores are both applied
+    afterward, directly on the in-memory per-match results, so no event file
+    is re-processed.
+    """
     provider = DataProvider(data_root=data_root)
     processor = EventProcessor()
 
-    # Load and process matches. When both team_name and week_no are given, team_name's
-    # matches outside week_no are excluded; every other team's matches are unaffected.
-    matches = provider.get_matches(seasons=[season], team_name=team_name, week_no=week_no)
+    # Load every match for the season, unfiltered - team_name/week_no filtering
+    # (if any) is applied below, directly on the already-processed results.
+    matches = provider.get_matches(seasons=[season])
     total_matches = len(matches)
     print(f"Processing {total_matches} matches...", flush=True)
     print(f"[PROGRESS]2|60|Processing event data: Loading files...", flush=True)
@@ -80,11 +100,45 @@ def get_aggregates_for_team(season: str, data_root: str = None, team_name: str =
         progress_percent = 60 + int((idx / total_matches) * 34)
         print(f"[PROGRESS]2|{progress_percent}|Processing event data: {idx}/{total_matches} - {match_info}...", flush=True)
 
-    # Aggregate stats per team across all matches
     print(f"[PROGRESS]2|95|Aggregating match statistics...", flush=True)
-    aggregates_by_layer = processor.aggregate_results(results_by_match)
 
-    return aggregates_by_layer
+    if team_name and week_no is not None:
+        # Full-season aggregate (every match, including team_name's other weeks) -
+        # used only to capture team_name's original z-scores before restricting
+        # its matches to week_no below.
+        original_aggregates_by_layer = processor.aggregate_results(results_by_match)
+        original_z_scores_by_layer = {}
+        for layer_name, team_aggregates in original_aggregates_by_layer.items():
+            team_data = _find_team_aggregate(team_aggregates, team_name)
+            if team_data:
+                original_z_scores_by_layer[layer_name] = {
+                    metric_key: metric.z_score for metric_key, metric in team_data.items()
+                    if isinstance(metric, Metric)
+                }
+
+        # Same filter DataProvider.get_matches() applies when team_name/week_no are
+        # both given: drop team_name's matches in every other week, leave every
+        # other team's matches untouched - applied here on the in-memory results
+        # instead of re-reading match files from disk.
+        results_by_match = [
+            (filename, results) for filename, results in results_by_match
+            if team_name not in provider._get_teams_from_filename(filename.name)
+            or provider._get_week_from_filename(filename.name) == week_no
+        ]
+
+        aggregates_by_layer = processor.aggregate_results(results_by_match)
+
+        for layer_name, original_z_scores in original_z_scores_by_layer.items():
+            team_data = _find_team_aggregate(aggregates_by_layer.get(layer_name, {}), team_name)
+            if team_data:
+                for metric_key, metric in team_data.items():
+                    if isinstance(metric, Metric) and metric_key in original_z_scores:
+                        metric.secondary_z_score = original_z_scores[metric_key]
+
+        return aggregates_by_layer
+
+    # No week override requested - aggregate stats per team across all matches
+    return processor.aggregate_results(results_by_match)
 
 
 def get_all_styles() -> str:

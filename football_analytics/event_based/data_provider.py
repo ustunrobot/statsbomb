@@ -929,7 +929,10 @@ class DataProvider:
                     given: team_name's season-stats entry is replaced with its
                     match-level stats from that week (see
                     _apply_week_team_stats_override). Every other team's entry is
-                    left untouched.
+                    left untouched. The season-level z-score for each overridden
+                    metric is preserved on the resulting Metric's
+                    secondary_z_score field, so it isn't lost under the
+                    week-level z-score.
             week_no: Optional week number. See team_name.
 
         Returns:
@@ -959,11 +962,26 @@ class DataProvider:
                     stats = json.load(f)
                     print(f"[DataProvider] ✓ Loaded stats from {stats_file}")
 
+                    original_z_scores = {}
                     if team_name is not None and week_no is not None:
+                        # Capture team_name's season-level z-scores before overriding,
+                        # so they can be kept as a secondary reference on the
+                        # overridden Metric objects below.
+                        original_team_stats = self.process_team_stats(stats).get(team_name, {})
+                        original_z_scores = {
+                            metric_key: metric.z_score for metric_key, metric in original_team_stats.items()
+                        }
+
                         stats = self._apply_week_team_stats_override(stats, team_name, week_no)
 
                     # Process all teams and return full stats
                     all_teams_stats = self.process_team_stats(stats)
+
+                    if original_z_scores and team_name in all_teams_stats:
+                        for metric_key, metric in all_teams_stats[team_name].items():
+                            if metric_key in original_z_scores:
+                                metric.secondary_z_score = original_z_scores[metric_key]
+
                     return all_teams_stats
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[DataProvider] Error loading stats file {stats_file}: {e}")
@@ -1213,7 +1231,22 @@ class DataProvider:
             'physical_tip': 'tip',
         }
 
+        original_z_scores = {}
         if team_name and home_name and away_name:
+            # Capture team_name's season-level z-scores (per section) before overriding,
+            # so they can be kept as a secondary reference on the overridden Metric
+            # objects below.
+            for result_key, section_key in section_keys.items():
+                section_stats = sections.get(section_key)
+                if not section_stats:
+                    continue
+                original_team_stats = self.process_team_stats_sk(section_stats)
+                matched_name = self._match_reference_name(team_name, original_team_stats.keys())
+                if matched_name:
+                    original_z_scores[result_key] = {
+                        metric_key: metric.z_score for metric_key, metric in original_team_stats[matched_name].items()
+                    }
+
             sections = self._apply_match_team_stats_override_sk(
                 sections, section_keys, skillcorner_root, competition_id, season_id,
                 team_name, home_name, away_name
@@ -1236,6 +1269,15 @@ class DataProvider:
                         print(f"[DataProvider] Could not match SkillCorner team '{sk_team_name}' to a StatsBomb team name")
                     remapped[matched_name or sk_team_name] = team_metrics
                 results[key] = remapped
+
+        # Apply the kept original z-scores as a secondary reference on team_name's
+        # overridden metrics (every other team is left untouched).
+        for result_key, z_scores in original_z_scores.items():
+            team_metrics = results.get(result_key, {}).get(team_name)
+            if team_metrics:
+                for metric_key, metric in team_metrics.items():
+                    if metric_key in z_scores:
+                        metric.secondary_z_score = z_scores[metric_key]
 
         return results
 
@@ -1273,6 +1315,8 @@ class DataProvider:
             Returns: Dict built from the 'tip'/'otip'/'h1'/'h2'/'all' sections of
             competition_5_season_351_player_physical.json
         """
+        from .metrics import Metric
+
         # Construct filename: competition_5_season_351_player_physical.json
         filename = f"competition_{competition_id}_season_{season_id}_player_physical.json"
 
@@ -1302,7 +1346,21 @@ class DataProvider:
             'player_all': 'all',
         }
 
+        original_z_scores = {}
         if team_name and home_name and away_name:
+            # Capture player_id's season-level z-scores (per section) before overriding,
+            # so they can be kept as a secondary reference on the overridden Metric
+            # objects below.
+            for result_key, section_key in section_keys.items():
+                section_stats = sections.get(section_key)
+                if not section_stats:
+                    continue
+                original_player_stats = self.process_player_stats_sk(section_stats, competition_id, season_id, player_id)
+                original_z_scores[result_key] = {
+                    metric_key: metric.z_score for metric_key, metric in original_player_stats.items()
+                    if isinstance(metric, Metric)
+                }
+
             sections = self._apply_match_player_stats_override_sk(
                 sections, section_keys, skillcorner_root, competition_id, season_id,
                 player_id, team_name, home_name, away_name
@@ -1312,6 +1370,15 @@ class DataProvider:
         for result_key, section_key in section_keys.items():
             section_stats = sections.get(section_key)
             results[result_key] = self.process_player_stats_sk(section_stats, competition_id, season_id, player_id) if section_stats else {}
+
+        # Apply the kept original z-scores as a secondary reference on player_id's
+        # overridden metrics.
+        for result_key, z_scores in original_z_scores.items():
+            player_metrics = results.get(result_key)
+            if player_metrics:
+                for metric_key, metric in player_metrics.items():
+                    if isinstance(metric, Metric) and metric_key in z_scores:
+                        metric.secondary_z_score = z_scores[metric_key]
 
         return results
 
@@ -1485,6 +1552,8 @@ class DataProvider:
 
         print(f"[DataProvider] Looking for player stats file: {player_stats_file}")
 
+        from .metrics import Metric
+
         if player_stats_file.exists():
             try:
                 with open(player_stats_file, 'r', encoding='utf-8') as f:
@@ -1494,6 +1563,22 @@ class DataProvider:
                     match_stats = None
                     if team_name is not None and week_no is not None:
                         match_stats = self._load_week_player_match_stats(team_name, week_no, player_id)
+
+                    if match_stats is not None:
+                        # Capture player_id's season-level z-scores before overriding,
+                        # so they can be kept as a secondary reference on the
+                        # overridden Metric objects below.
+                        original_player_stats = self.process_player_stats(player_stats, player_id)
+                        original_z_scores = {
+                            metric_key: metric.z_score for metric_key, metric in original_player_stats.items()
+                            if isinstance(metric, Metric)
+                        }
+
+                        result = self.process_player_stats(player_stats, player_id, match_stats=match_stats)
+                        for metric_key, metric in result.items():
+                            if isinstance(metric, Metric) and metric_key in original_z_scores:
+                                metric.secondary_z_score = original_z_scores[metric_key]
+                        return result
 
                     return self.process_player_stats(player_stats, player_id, match_stats=match_stats)
             except (json.JSONDecodeError, IOError) as e:
